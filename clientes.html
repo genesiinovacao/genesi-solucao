@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Clientes — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">👥 Clientes</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">👥</span>Clientes</h1>
+        <div class="page-actions">
+          <button class="btn btn-secondary" onclick="exportarClientesCSV()">📥 Exportar</button>
+          <button class="btn btn-primary" onclick="novoCliente()">➕ Novo Cliente</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid" id="clientes-kpis"></div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="setTab('todos',this)">Todos</button>
+        <button class="tab" onclick="setTab('ativo',this)">Ativos</button>
+        <button class="tab" onclick="setTab('inativo',this)">Inativos</button>
+        <button class="tab" onclick="setTab('vip',this)">⭐ VIP (+500 pts)</button>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="search-cliente" placeholder="Buscar por nome, CPF ou e-mail..."></div>
+      </div>
+
+      <div class="grid-3" id="clientes-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Cliente -->
+<div class="modal-overlay" id="modal-cliente">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-cliente-title">➕ Novo Cliente</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-cliente')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome Completo *</label><input type="text" class="form-control" id="c-nome" placeholder="João da Silva"></div>
+      <div class="form-group"><label class="form-label">CPF</label><input type="text" class="form-control" id="c-cpf" placeholder="000.000.000-00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Telefone</label><input type="text" class="form-control" id="c-telefone" placeholder="(11) 99999-0000"></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input type="email" class="form-control" id="c-email" placeholder="email@exemplo.com"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Endereço</label><input type="text" class="form-control" id="c-endereco" placeholder="Rua, Número - Bairro"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Pontos de Fidelidade</label><input type="number" class="form-control" id="c-pontos" placeholder="0" min="0"></div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-control" id="c-status"><option value="ativo">✅ Ativo</option><option value="inativo">❌ Inativo</option></select>
+      </div>
+    </div>
+    <input type="hidden" id="c-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-cliente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarCliente()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalhes Cliente -->
+<div class="modal-overlay" id="modal-detalhe-cliente">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title">👤 Perfil do Cliente</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-detalhe-cliente')">✕</button>
+    </div>
+    <div id="detalhe-content"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="APP.closeModal('modal-detalhe-cliente')">Fechar</button></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/clientes.js"></script>
+</body>
+</html>

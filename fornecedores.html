@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Fornecedores — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">🏭 Fornecedores</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">🏭</span>Fornecedores</h1>
+        <div class="page-actions">
+          <button class="btn btn-primary" onclick="novoFornecedor()">➕ Novo Fornecedor</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid" id="forn-kpis"></div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div class="search-bar" style="flex:1;min-width:200px"><span class="search-icon">🔍</span><input type="text" id="search-forn" placeholder="Buscar fornecedor, CNPJ..."></div>
+          <select class="form-control" id="filtro-forn-status" style="width:160px">
+            <option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrapper card">
+        <table class="data-table">
+          <thead><tr><th>Fornecedor</th><th>CNPJ</th><th>Contato</th><th>Telefone</th><th>Categoria</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="forn-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Fornecedor -->
+<div class="modal-overlay" id="modal-forn">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-forn-title">➕ Novo Fornecedor</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-forn')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Razão Social *</label><input type="text" class="form-control" id="f-nome" placeholder="Distribuidora XYZ Ltda"></div>
+      <div class="form-group"><label class="form-label">CNPJ</label><input type="text" class="form-control" id="f-cnpj" placeholder="00.000.000/0001-00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome do Contato</label><input type="text" class="form-control" id="f-contato" placeholder="João Silva"></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input type="text" class="form-control" id="f-telefone" placeholder="(11) 3333-0000"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">E-mail</label><input type="email" class="form-control" id="f-email" placeholder="comercial@empresa.com"></div>
+      <div class="form-group"><label class="form-label">Categoria</label>
+        <select class="form-control" id="f-categoria">
+          <option>Mercearia</option><option>Laticínios</option><option>Bebidas</option><option>Carnes</option><option>Higiene/Limpeza</option><option>Outros</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Status</label>
+      <select class="form-control" id="f-status"><option value="ativo">✅ Ativo</option><option value="inativo">❌ Inativo</option></select>
+    </div>
+    <input type="hidden" id="f-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-forn')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarFornecedor()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script>
+<script>
+function initForn(){
+  renderKPIsForn();renderTabelaForn();
+  document.getElementById('search-forn').addEventListener('input',renderTabelaForn);
+  document.getElementById('filtro-forn-status').addEventListener('change',renderTabelaForn);
+}
+function renderKPIsForn(){
+  const lista=DataService.getFornecedores();
+  const ativos=lista.filter(f=>f.status==='ativo').length;
+  document.getElementById('forn-kpis').innerHTML=`
+    <div class="kpi-card"><div class="kpi-icon">🏭</div><div class="kpi-value">${lista.length}</div><div class="kpi-label">Total Fornecedores</div></div>
+    <div class="kpi-card success"><div class="kpi-icon">✅</div><div class="kpi-value">${ativos}</div><div class="kpi-label">Ativos</div></div>
+    <div class="kpi-card danger"><div class="kpi-icon">❌</div><div class="kpi-value">${lista.length-ativos}</div><div class="kpi-label">Inativos</div></div>
+  `;
+}
+function renderTabelaForn(){
+  const q=document.getElementById('search-forn').value.toLowerCase();
+  const st=document.getElementById('filtro-forn-status').value;
+  let lista=DataService.getFornecedores();
+  if(q)lista=lista.filter(f=>f.nome.toLowerCase().includes(q)||f.cnpj.includes(q)||f.contato.toLowerCase().includes(q));
+  if(st)lista=lista.filter(f=>f.status===st);
+  const tbody=document.getElementById('forn-tbody');
+  if(!lista.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏭</div><h3>Nenhum fornecedor encontrado</h3></div></td></tr>';return;}
+  tbody.innerHTML=lista.map(f=>`<tr>
+    <td><strong>${f.nome}</strong></td>
+    <td style="font-family:monospace;font-size:.78rem;color:var(--text-secondary)">${f.cnpj}</td>
+    <td>${f.contato}</td>
+    <td>${f.telefone}</td>
+    <td><span class="badge badge-info">${f.categoria}</span></td>
+    <td><span class="badge badge-${f.status==='ativo'?'success':'danger'}">${f.status==='ativo'?'Ativo':'Inativo'}</span></td>
+    <td><div style="display:flex;gap:6px">
+      <button class="btn-icon" onclick="editarForn(${f.id})">✏️</button>
+      <button class="btn-icon" onclick="window.location.href='mailto:${f.email}'" title="E-mail">✉️</button>
+      <button class="btn-icon danger" onclick="excluirForn(${f.id})">🗑️</button>
+    </div></td>
+  </tr>`).join('');
+}
+function novoFornecedor(){
+  document.getElementById('modal-forn-title').textContent='➕ Novo Fornecedor';
+  ['f-id','f-nome','f-cnpj','f-contato','f-telefone','f-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('f-status').value='ativo';
+  APP.openModal('modal-forn');
+}
+function editarForn(id){
+  const f=DataService.getFornecedores().find(x=>x.id===id);if(!f)return;
+  document.getElementById('modal-forn-title').textContent='✏️ Editar Fornecedor';
+  document.getElementById('f-id').value=f.id;document.getElementById('f-nome').value=f.nome;
+  document.getElementById('f-cnpj').value=f.cnpj;document.getElementById('f-contato').value=f.contato;
+  document.getElementById('f-telefone').value=f.telefone;document.getElementById('f-email').value=f.email;
+  document.getElementById('f-categoria').value=f.categoria;document.getElementById('f-status').value=f.status;
+  APP.openModal('modal-forn');
+}
+function salvarFornecedor(){
+  const nome=document.getElementById('f-nome').value.trim();
+  if(!nome){APP.toast('Nome é obrigatório!','error');return;}
+  const data={nome,cnpj:document.getElementById('f-cnpj').value,contato:document.getElementById('f-contato').value,
+    telefone:document.getElementById('f-telefone').value,email:document.getElementById('f-email').value,
+    categoria:document.getElementById('f-categoria').value,status:document.getElementById('f-status').value};
+  const id=document.getElementById('f-id').value;
+  if(id){DataService.updateFornecedor(id,data);APP.toast('Fornecedor atualizado!','success');}
+  else{DataService.addFornecedor(data);APP.toast('Fornecedor cadastrado!','success');}
+  APP.closeModal('modal-forn');renderKPIsForn();renderTabelaForn();
+}
+function excluirForn(id){
+  APP.confirm('Excluir este fornecedor?',()=>{DataService.deleteFornecedor(id);APP.toast('Fornecedor excluído!','success');renderKPIsForn();renderTabelaForn();});
+}
+document.addEventListener('DOMContentLoaded',initForn);
+</script>
+</body>
+</html>

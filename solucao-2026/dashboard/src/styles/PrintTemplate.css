@@ -1,0 +1,80 @@
+/* SOLUÇÃO 2026 - Modern PDF Export Styles */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 20mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12pt;
+  }
+
+  /* Header Premium for Reports */
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 4px solid #2563eb;
+    padding-bottom: 20px;
+    margin-bottom: 40px;
+  }
+
+  .print-logo {
+    font-size: 24pt;
+    font-weight: 900;
+    color: #2563eb;
+  }
+
+  .print-meta {
+    text-align: right;
+    font-size: 10pt;
+    color: #64748b;
+  }
+
+  /* Cards Adjustment */
+  .tremor-card {
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    margin-bottom: 20px;
+  }
+
+  /* Hide UI elements */
+  .no-print, button, nav, aside {
+    display: none !important;
+  }
+
+  /* Table styles for PDF */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+
+  th {
+    background: #f8fafc;
+    text-align: left;
+    padding: 12px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  td {
+    padding: 12px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  /* Footer for PDF */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 8pt;
+    color: #94a3b8;
+    padding: 10px 0;
+    border-top: 1px solid #e2e8f0;
+  }
+}

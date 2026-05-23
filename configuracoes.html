@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Configurações — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">⚙️ Configurações</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">⚙️</span>Configurações</h1>
+        <div class="page-actions"><button class="btn btn-primary" onclick="salvarConfig()">💾 Salvar Alterações</button></div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="setConfigTab('empresa',this)">🏢 Empresa</button>
+        <button class="tab" onclick="setConfigTab('fiscal',this)">📋 Fiscal</button>
+        <button class="tab" onclick="setConfigTab('usuario',this)">👤 Usuário</button>
+        <button class="tab" onclick="setConfigTab('integracoes',this)">🔗 Integrações</button>
+        <button class="tab" onclick="setConfigTab('sistema',this)">⚙️ Sistema</button>
+      </div>
+
+      <!-- Empresa -->
+      <div id="tab-empresa" class="card">
+        <div class="card-header"><div class="card-title">🏢 Dados da Empresa</div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Nome da Empresa *</label><input type="text" class="form-control" id="cfg-empresa" placeholder="Mercado do João"></div>
+          <div class="form-group"><label class="form-label">CNPJ</label><input type="text" class="form-control" id="cfg-cnpj" placeholder="00.000.000/0001-00"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Telefone</label><input type="text" class="form-control" id="cfg-telefone" placeholder="(11) 99999-0000"></div>
+          <div class="form-group"><label class="form-label">E-mail</label><input type="email" class="form-control" id="cfg-email" placeholder="contato@empresa.com"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Endereço Completo</label><input type="text" class="form-control" id="cfg-endereco" placeholder="Rua, Número - Bairro - Cidade/UF"></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Meta de Vendas Diária (R$)</label><input type="number" class="form-control" id="cfg-meta" placeholder="3500" min="0"></div>
+        </div>
+      </div>
+
+      <!-- Fiscal -->
+      <div id="tab-fiscal" class="card" style="display:none">
+        <div class="card-header"><div class="card-title">📋 Configurações Fiscais</div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Regime Tributário</label>
+            <select class="form-control" id="cfg-regime">
+              <option value="simples_nacional">Simples Nacional</option>
+              <option value="lucro_presumido">Lucro Presumido</option>
+              <option value="lucro_real">Lucro Real</option>
+              <option value="mei">MEI</option>
+            </select>
+          </div>
+        </div>
+        <div class="alert alert-info">ℹ️ <span>Regras fiscais são atualizadas automaticamente via Mix Fiscal (simulado). Mantenha seus dados tributários sempre atualizados.</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-secondary" onclick="APP.toast('Mix Fiscal sincronizado! ✅','success')">🔄 Sincronizar Mix Fiscal</button>
+          <button class="btn btn-secondary" onclick="APP.toast('NFe configurada! ✅','success')">🧾 Configurar NFe</button>
+          <button class="btn btn-secondary" onclick="APP.toast('SAT configurado! ✅','success')">💾 Configurar SAT</button>
+        </div>
+      </div>
+
+      <!-- Usuário -->
+      <div id="tab-usuario" class="card" style="display:none">
+        <div class="card-header"><div class="card-title">👤 Dados do Usuário</div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Nome</label><input type="text" class="form-control" id="cfg-user-nome" placeholder="João Silva"></div>
+          <div class="form-group"><label class="form-label">Cargo</label><input type="text" class="form-control" id="cfg-user-cargo" placeholder="Gerente"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Iniciais (Avatar)</label><input type="text" class="form-control" id="cfg-user-avatar" placeholder="JS" maxlength="2"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="card-title" style="margin-bottom:12px">🔒 Alterar Senha</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Senha Atual</label><input type="password" class="form-control" placeholder="••••••••"></div>
+          <div class="form-group"><label class="form-label">Nova Senha</label><input type="password" class="form-control" placeholder="••••••••"></div>
+          <div class="form-group"><label class="form-label">Confirmar Senha</label><input type="password" class="form-control" placeholder="••••••••"></div>
+        </div>
+      </div>
+
+      <!-- Integrações -->
+      <div id="tab-integracoes" class="card" style="display:none">
+        <div class="card-header"><div class="card-title">🔗 Integrações Inteligentes</div></div>
+        <div class="grid-2">
+          <div style="border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">🛵</span>
+              <div><div style="font-weight:700">iFood Mercado</div><div class="text-muted text-sm">Delivery integrado</div></div>
+              <span class="badge badge-success" style="margin-left:auto">Ativo</span>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="APP.toast('iFood configurado!','success')">Configurar</button>
+          </div>
+          <div style="border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">📱</span>
+              <div><div style="font-weight:700">WhatsApp Business</div><div class="text-muted text-sm">Notificações automáticas</div></div>
+              <span class="badge badge-success" style="margin-left:auto">Ativo</span>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="APP.toast('WhatsApp configurado!','success')">Configurar</button>
+          </div>
+          <div style="border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">🏷️</span>
+              <div><div style="font-weight:700">Scantech</div><div class="text-muted text-sm">Bonificações da indústria</div></div>
+              <span class="badge badge-warning" style="margin-left:auto">Pendente</span>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="APP.toast('Conectando Scantech...','info')">Conectar</button>
+          </div>
+          <div style="border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:1.5rem">📊</span>
+              <div><div style="font-weight:700">Mix Fiscal</div><div class="text-muted text-sm">Regras tributárias</div></div>
+              <span class="badge badge-success" style="margin-left:auto">Ativo</span>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="APP.toast('Mix Fiscal sincronizado!','success')">Sincronizar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sistema -->
+      <div id="tab-sistema" class="card" style="display:none">
+        <div class="card-header"><div class="card-title">⚙️ Configurações do Sistema</div></div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:var(--bg-tertiary);border-radius:var(--radius-md)">
+            <div><div style="font-weight:600">🔔 Alertas de Estoque Crítico</div><div class="text-muted text-sm">Notificar quando produto atingir estoque mínimo</div></div>
+            <label style="cursor:pointer"><input type="checkbox" checked style="accent-color:var(--accent-primary);width:18px;height:18px"></label>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:var(--bg-tertiary);border-radius:var(--radius-md)">
+            <div><div style="font-weight:600">📱 Notificações WhatsApp Automáticas</div><div class="text-muted text-sm">Enviar status do delivery ao cliente</div></div>
+            <label style="cursor:pointer"><input type="checkbox" checked style="accent-color:var(--accent-primary);width:18px;height:18px"></label>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:var(--bg-tertiary);border-radius:var(--radius-md)">
+            <div><div style="font-weight:600">🤖 SOLUÇÃO IA</div><div class="text-muted text-sm">Assistente de inteligência artificial</div></div>
+            <label style="cursor:pointer"><input type="checkbox" checked style="accent-color:var(--accent-primary);width:18px;height:18px"></label>
+          </div>
+          <div class="divider"></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-danger" onclick="resetarDados()">🗑️ Resetar Dados Demo</button>
+            <button class="btn btn-secondary" onclick="APP.toast('Backup criado!','success')">💾 Fazer Backup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script>
+<script>
+function setConfigTab(tab,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['empresa','fiscal','usuario','integracoes','sistema'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el)el.style.display=t===tab?'block':'none';
+  });
+}
+
+function loadConfig(){
+  const cfg=DataService.getConfig();
+  document.getElementById('cfg-empresa').value=cfg.empresa||'';
+  document.getElementById('cfg-cnpj').value=cfg.cnpj||'';
+  document.getElementById('cfg-telefone').value=cfg.telefone||'';
+  document.getElementById('cfg-email').value=cfg.email||'';
+  document.getElementById('cfg-endereco').value=cfg.endereco||'';
+  document.getElementById('cfg-meta').value=cfg.meta_vendas_dia||3500;
+  document.getElementById('cfg-regime').value=cfg.regime||'simples_nacional';
+  document.getElementById('cfg-user-nome').value=cfg.usuario?.nome||'';
+  document.getElementById('cfg-user-cargo').value=cfg.usuario?.cargo||'';
+  document.getElementById('cfg-user-avatar').value=cfg.usuario?.avatar||'';
+}
+
+function salvarConfig(){
+  const cfg=DataService.getConfig();
+  const novosCfg={...cfg,
+    empresa:document.getElementById('cfg-empresa').value,
+    cnpj:document.getElementById('cfg-cnpj').value,
+    telefone:document.getElementById('cfg-telefone').value,
+    email:document.getElementById('cfg-email').value,
+    endereco:document.getElementById('cfg-endereco').value,
+    meta_vendas_dia:parseFloat(document.getElementById('cfg-meta').value)||3500,
+    regime:document.getElementById('cfg-regime').value,
+    usuario:{
+      nome:document.getElementById('cfg-user-nome').value,
+      cargo:document.getElementById('cfg-user-cargo').value,
+      avatar:document.getElementById('cfg-user-avatar').value||'JS'
+    }
+  };
+  DataService.saveConfig(novosCfg);
+  APP.toast('✅ Configurações salvas com sucesso!','success');
+}
+
+function resetarDados(){
+  APP.confirm('Isso irá resetar TODOS os dados para o estado inicial. Tem certeza?',()=>{
+    DB.remove('initialized');location.reload();
+  });
+}
+
+document.addEventListener('DOMContentLoaded',loadConfig);
+</script>
+</body>
+</html>

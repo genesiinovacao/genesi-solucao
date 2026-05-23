@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Promoções — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">🏷️ Promoções</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">🏷️</span>Promoções</h1>
+        <div class="page-actions">
+          <button class="btn btn-primary" onclick="novaPromocao()">➕ Nova Promoção</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid" id="promo-kpis"></div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="setPromoTab('todas',this)">Todas</button>
+        <button class="tab" onclick="setPromoTab('ativa',this)">✅ Ativas</button>
+        <button class="tab" onclick="setPromoTab('inativa',this)">❌ Encerradas</button>
+      </div>
+
+      <div class="grid-3" id="promo-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Promoção -->
+<div class="modal-overlay" id="modal-promo">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-promo-title">➕ Nova Promoção</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-promo')">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Nome da Promoção *</label><input type="text" class="form-control" id="pr-nome" placeholder="Ex: Semana do Café"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Desconto (%) *</label><input type="number" class="form-control" id="pr-desconto" placeholder="0" min="1" max="90"></div>
+      <div class="form-group"><label class="form-label">Tipo</label>
+        <select class="form-control" id="pr-tipo">
+          <option value="produto">📦 Produto específico</option>
+          <option value="categoria">📁 Categoria</option>
+          <option value="fidelidade">⭐ Clientes Fidelidade</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Alvo (produto/categoria)</label><input type="text" class="form-control" id="pr-alvo" placeholder="Ex: Arroz Branco 5kg"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Início</label><input type="date" class="form-control" id="pr-inicio"></div>
+      <div class="form-group"><label class="form-label">Fim</label><input type="date" class="form-control" id="pr-fim"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Status</label>
+      <select class="form-control" id="pr-ativo"><option value="true">✅ Ativa</option><option value="false">❌ Inativa</option></select>
+    </div>
+    <input type="hidden" id="pr-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-promo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarPromocao()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/promocoes.js"></script>
+</body>
+</html>

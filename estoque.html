@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Estoque — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">📦 Gestão de Estoque</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar" id="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">📦</span>Estoque</h1>
+        <div class="page-actions">
+          <button class="btn btn-secondary" onclick="exportarCSV()">📥 Exportar CSV</button>
+          <button class="btn btn-primary" onclick="APP.openModal('modal-produto')">➕ Novo Produto</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid" id="estoque-kpis"></div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:18px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <div class="search-bar" style="flex:1;min-width:200px">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-estoque" placeholder="Buscar produto, código...">
+          </div>
+          <select class="form-control" id="filtro-categoria" style="width:160px">
+            <option value="">Todas Categorias</option>
+          </select>
+          <select class="form-control" id="filtro-status" style="width:150px">
+            <option value="">Todos os Status</option>
+            <option value="critico">Estoque Crítico</option>
+            <option value="baixo">Estoque Baixo</option>
+            <option value="ok">Estoque OK</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Produto</th><th>Código</th><th>Categoria</th>
+                <th>Custo</th><th>Venda</th><th>Margem</th>
+                <th>Estoque</th><th>Mín.</th><th>Status</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="estoque-tbody"></tbody>
+          </table>
+        </div>
+        <div id="estoque-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:.8rem;color:var(--text-secondary)"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Produto -->
+<div class="modal-overlay" id="modal-produto">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-produto-title">➕ Novo Produto</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-produto')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome do Produto *</label><input type="text" class="form-control" id="p-nome" placeholder="Ex: Arroz Branco 5kg"></div>
+      <div class="form-group"><label class="form-label">Código de Barras</label><input type="text" class="form-control" id="p-codigo" placeholder="7891234560000"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Categoria *</label>
+        <select class="form-control" id="p-categoria">
+          <option>Mercearia</option><option>Laticínios</option><option>Bebidas</option><option>Carnes</option><option>Frios</option><option>Padaria</option><option>Limpeza</option><option>Higiene</option><option>Outros</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Unidade</label>
+        <select class="form-control" id="p-unidade"><option>un</option><option>kg</option><option>pc</option><option>cx</option><option>lt</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Emoji/Ícone</label><input type="text" class="form-control" id="p-emoji" placeholder="🛒" maxlength="2"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Preço de Custo (R$) *</label><input type="number" class="form-control" id="p-custo" placeholder="0,00" step="0.01" min="0"></div>
+      <div class="form-group"><label class="form-label">Preço de Venda (R$) *</label><input type="number" class="form-control" id="p-venda" placeholder="0,00" step="0.01" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Estoque Atual *</label><input type="number" class="form-control" id="p-estoque" placeholder="0" min="0"></div>
+      <div class="form-group"><label class="form-label">Estoque Mínimo *</label><input type="number" class="form-control" id="p-estoque-min" placeholder="0" min="0"></div>
+    </div>
+    <div id="margem-preview" style="background:var(--bg-tertiary);padding:12px;border-radius:var(--radius-md);font-size:.85rem;margin-bottom:8px"></div>
+    <input type="hidden" id="p-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-produto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarProduto()">💾 Salvar Produto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Movimentação -->
+<div class="modal-overlay" id="modal-movimentacao">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📦 Movimentar Estoque</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-movimentacao')">✕</button>
+    </div>
+    <div id="mov-produto-nome" style="font-weight:700;margin-bottom:16px;font-size:1rem"></div>
+    <div class="form-group"><label class="form-label">Tipo</label>
+      <select class="form-control" id="mov-tipo">
+        <option value="entrada">📈 Entrada (Compra/Reposição)</option>
+        <option value="saida">📉 Saída (Ajuste/Perda)</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Quantidade</label><input type="number" class="form-control" id="mov-qty" placeholder="0" min="1"></div>
+    <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="mov-obs" placeholder="Ex: Compra NF 001"></div>
+    <input type="hidden" id="mov-produto-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-movimentacao')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarMovimentacao()">✅ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/estoque.js"></script>
+</body>
+</html>

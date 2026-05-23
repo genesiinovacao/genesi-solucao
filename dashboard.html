@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Dashboard — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title" id="empresa-nome">SOLUÇÃO</div><div class="page-subtitle">Dashboard Principal</div></div>
+      </div>
+      <div class="top-bar-right">
+        <div id="clock" style="font-size:.8rem;color:var(--text-secondary);font-family:monospace"></div>
+        <button class="notif-btn" id="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar" id="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">📊</span>Dashboard</h1>
+        <div class="page-actions">
+          <span id="data-hoje" style="font-size:.85rem;color:var(--text-secondary)"></span>
+          <button class="btn btn-primary" onclick="window.location.href='pdv.html'">🛒 Abrir Caixa</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <!-- Meta do Dia -->
+      <div class="card mb-4" id="meta-card" style="margin-bottom:20px">
+        <div class="card-header">
+          <div><div class="card-title">🎯 Meta de Vendas do Dia</div><div class="card-subtitle">Acompanhe seu progresso</div></div>
+          <span id="meta-pct-label" class="badge badge-primary">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill primary" id="meta-progress" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.78rem;color:var(--text-secondary)">
+          <span>R$ 0,00</span><span id="meta-valor-label">Meta: R$ 0,00</span>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📈 Vendas dos Últimos 7 Dias</div></div>
+          <div class="chart-container"><canvas id="chart-vendas"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🏷️ Vendas por Categoria</div></div>
+          <div class="chart-container"><canvas id="chart-categorias"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Alerts + Activity -->
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚠️ Alertas do Sistema</div><a href="estoque.html" class="btn btn-sm btn-secondary">Ver Estoque</a></div>
+          <div id="alertas-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🕐 Atividade Recente</div></div>
+          <div class="activity-feed" id="activity-feed"></div>
+        </div>
+      </div>
+
+      <!-- Produtos críticos -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">📦 Produtos em Estoque Crítico</div><a href="estoque.html" class="btn btn-sm btn-warning">Repor Estoque</a></div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Produto</th><th>Categoria</th><th>Estoque Atual</th><th>Mínimo</th><th>Status</th></tr></thead>
+            <tbody id="criticos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="js/data.js"></script><script src="js/app.js"></script>
+<script>
+document.getElementById('data-hoje').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+(function clock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString('pt-BR');setTimeout(clock,1000)})();
+
+function loadDashboard(){
+  const kpis=DataService.getDashboardKPIs();
+  const cfg=DataService.getConfig();
+
+  // KPIs
+  document.getElementById('kpi-grid').innerHTML=`
+    <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-value">${formatMoeda(kpis.vendas_dia)}</div><div class="kpi-label">Vendas Hoje</div><span class="kpi-change ${kpis.variacao_vendas>=0?'up':'down'}">${kpis.variacao_vendas>=0?'▲':'▼'} ${Math.abs(kpis.variacao_vendas)}% vs ontem</span></div>
+    <div class="kpi-card success"><div class="kpi-icon">🛍️</div><div class="kpi-value">${kpis.qtd_vendas}</div><div class="kpi-label">Vendas Realizadas</div><span class="kpi-change up">▲ Transações hoje</span></div>
+    <div class="kpi-card info"><div class="kpi-icon">🎯</div><div class="kpi-value">${formatMoeda(kpis.ticket_medio)}</div><div class="kpi-label">Ticket Médio</div><span class="kpi-change up">▲ Por venda</span></div>
+    <div class="kpi-card ${kpis.estoque_critico>0?'danger':'success'}"><div class="kpi-icon">📦</div><div class="kpi-value">${kpis.estoque_critico}</div><div class="kpi-label">Estoque Crítico</div><span class="kpi-change ${kpis.estoque_critico>0?'down':'up'}">${kpis.estoque_critico>0?'▼ Atenção necessária':'▲ Tudo OK'}</span></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🚴</div><div class="kpi-value">${kpis.pedidos_ativos}</div><div class="kpi-label">Pedidos Ativos</div><span class="kpi-change up">▲ Em andamento</span></div>
+  `;
+
+  // Meta
+  const pct=Math.min(kpis.meta_percentual,100);
+  document.getElementById('meta-progress').style.width=pct+'%';
+  document.getElementById('meta-pct-label').textContent=pct+'%';
+  document.getElementById('meta-valor-label').textContent='Meta: '+formatMoeda(kpis.meta_dia);
+
+  // Charts
+  const vendas=DataService.getVendasHistorico().slice(-7);
+  const ctx1=document.getElementById('chart-vendas').getContext('2d');
+  new Chart(ctx1,{type:'bar',data:{labels:vendas.map(v=>formatData(v.data).slice(0,5)),datasets:[{label:'Vendas (R$)',data:vendas.map(v=>v.total),backgroundColor:'rgba(124,58,237,.7)',borderColor:'#7c3aed',borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#94a3b8',callback:v=>'R$'+v.toLocaleString('pt-BR')}}}}});
+
+  const ctx2=document.getElementById('chart-categorias').getContext('2d');
+  new Chart(ctx2,{type:'doughnut',data:{labels:['Mercearia','Laticínios','Bebidas','Limpeza','Higiene','Outros'],datasets:[{data:[35,20,18,12,8,7],backgroundColor:['#7c3aed','#06b6d4','#10b981','#f59e0b','#ef4444','#64748b'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#94a3b8',padding:14,font:{size:11}}}}}});
+
+  // Alertas
+  const produtos=DataService.getProdutos();
+  const criticos=produtos.filter(p=>p.estoque<=p.estoque_min);
+  let alertHtml='';
+  if(criticos.length>0)alertHtml+=`<div class="alert alert-danger">⚠️ <span>${criticos.length} produto(s) com estoque crítico!</span></div>`;
+  const trans=DataService.getTransacoes().filter(t=>t.tipo==='despesa'&&t.status==='pendente');
+  if(trans.length>0)alertHtml+=`<div class="alert alert-warning">💸 <span>${trans.length} conta(s) a pagar pendente(s)</span></div>`;
+  const pedidos=DataService.getPedidos().filter(p=>p.status==='pendente');
+  if(pedidos.length>0)alertHtml+=`<div class="alert alert-info">🚴 <span>${pedidos.length} pedido(s) de delivery aguardando</span></div>`;
+  if(!alertHtml)alertHtml='<div class="alert alert-success">✅ <span>Nenhum alerta no momento. Tudo funcionando!</span></div>';
+  document.getElementById('alertas-list').innerHTML=alertHtml;
+
+  // Activity
+  const activities=[
+    {icon:'💰',color:'rgba(124,58,237,.2)',title:'Venda realizada',desc:'Carrinho #0048 — R$ 87,30 no Pix',time:'Há 5 min'},
+    {icon:'📦',color:'rgba(239,68,68,.2)',title:'Estoque crítico',desc:'Café Torrado 500g — 5 un restantes',time:'Há 12 min'},
+    {icon:'🚴',color:'rgba(6,182,212,.2)',title:'Pedido Delivery',desc:'#DEL004 — Fernanda Lima',time:'Há 20 min'},
+    {icon:'👥',color:'rgba(16,185,129,.2)',title:'Novo cliente',desc:'Paulo Rodrigues cadastrado',time:'Há 1h'},
+    {icon:'🏷️',color:'rgba(245,158,11,.2)',title:'Promoção ativada',desc:'Semana da Mercearia — 15% OFF',time:'Há 2h'},
+  ];
+  document.getElementById('activity-feed').innerHTML=activities.map(a=>`
+    <div class="activity-item">
+      <div class="activity-icon" style="background:${a.color}">${a.icon}</div>
+      <div class="activity-content"><div class="activity-title">${a.title}</div><div class="activity-desc">${a.desc}</div></div>
+      <div class="activity-time">${a.time}</div>
+    </div>`).join('');
+
+  // Críticos table
+  document.getElementById('criticos-tbody').innerHTML=criticos.length>0
+    ?criticos.map(p=>`<tr><td><span style="font-size:1.2rem">${p.emoji}</span> ${p.nome}</td><td><span class="badge badge-gray">${p.categoria}</span></td><td><strong style="color:var(--accent-danger)">${p.estoque} ${p.unidade}</strong></td><td>${p.estoque_min} ${p.unidade}</td><td><span class="badge badge-danger">Crítico</span></td></tr>`).join('')
+    :'<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);padding:30px">✅ Nenhum produto em estoque crítico</td></tr>';
+}
+document.addEventListener('DOMContentLoaded',loadDashboard);
+</script>
+</body>
+</html>

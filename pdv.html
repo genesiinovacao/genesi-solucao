@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PDV — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content" style="display:flex;flex-direction:column">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">🛒 PDV — Ponto de Venda</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <span id="pdv-clock" style="font-family:monospace;font-size:.9rem;color:var(--text-secondary)"></span>
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar" id="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="pdv-layout" style="flex:1">
+      <!-- LEFT: Products -->
+      <div class="pdv-left">
+        <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <div class="search-bar" style="flex:1;min-width:200px">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="pdv-search" placeholder="Buscar produto ou código de barras...">
+          </div>
+          <select class="form-control" id="pdv-categoria" style="width:160px">
+            <option value="">Todas as Categorias</option>
+          </select>
+        </div>
+        <div class="product-grid" id="product-grid"></div>
+      </div>
+      <!-- RIGHT: Cart -->
+      <div class="pdv-right">
+        <div class="cart-header">
+          <span>🛒 Carrinho</span>
+          <button class="btn btn-sm btn-secondary" onclick="clearCart()">🗑️ Limpar</button>
+        </div>
+        <div class="cart-items" id="cart-items">
+          <div class="empty-state" style="padding:30px 10px">
+            <div class="empty-icon">🛒</div>
+            <h3>Carrinho vazio</h3>
+            <p>Clique nos produtos para adicionar</p>
+          </div>
+        </div>
+        <div class="cart-footer">
+          <div class="cart-total-row"><span>Subtotal</span><span id="subtotal">R$ 0,00</span></div>
+          <div class="cart-total-row"><span>Desconto</span><span id="desconto-display" style="color:var(--accent-success)">- R$ 0,00</span></div>
+          <div class="cart-total-row total"><span>TOTAL</span><span id="total-display" style="color:var(--accent-primary)">R$ 0,00</span></div>
+          <div style="margin:12px 0">
+            <label class="form-label">Desconto (%)</label>
+            <input type="number" class="form-control" id="desconto-input" placeholder="0" min="0" max="50" style="text-align:center">
+          </div>
+          <label class="form-label">Forma de Pagamento</label>
+          <div class="payment-btns" id="payment-btns">
+            <button class="payment-btn active" data-pay="dinheiro">💵 Dinheiro</button>
+            <button class="payment-btn" data-pay="pix">📱 Pix</button>
+            <button class="payment-btn" data-pay="debito">💳 Débito</button>
+            <button class="payment-btn" data-pay="credito">💳 Crédito</button>
+          </div>
+          <div id="troco-area" style="margin-top:10px;display:none">
+            <label class="form-label">Valor Recebido</label>
+            <input type="number" class="form-control" id="valor-recebido" placeholder="0,00">
+            <div style="margin-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:1rem">
+              <span>Troco:</span><span id="troco-value" style="color:var(--accent-success)">R$ 0,00</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-secondary" style="flex:1" onclick="APP.openModal('modal-cliente-pdv')">👤 Cliente</button>
+            <button class="btn btn-success btn-lg" style="flex:2;justify-content:center" id="btn-finalizar" onclick="finalizarVenda()">✅ Finalizar Venda</button>
+          </div>
+          <div id="cliente-selecionado" style="margin-top:8px;font-size:.78rem;color:var(--accent-secondary)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Cliente PDV -->
+<div class="modal-overlay" id="modal-cliente-pdv">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">👤 Selecionar Cliente</span><button class="modal-close" onclick="APP.closeModal('modal-cliente-pdv')">✕</button></div>
+    <div class="search-bar mb-3" style="margin-bottom:12px"><span class="search-icon">🔍</span><input type="text" id="search-cliente-pdv" placeholder="Buscar cliente..."></div>
+    <div id="clientes-pdv-list"></div>
+  </div>
+</div>
+
+<!-- Modal Cupom Fiscal -->
+<div class="modal-overlay" id="modal-cupom">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">🧾 Cupom da Venda</span><button class="modal-close" onclick="APP.closeModal('modal-cupom')">✕</button></div>
+    <div id="cupom-content" style="font-family:monospace;background:var(--bg-tertiary);padding:16px;border-radius:var(--radius-md);font-size:.8rem;line-height:1.8;white-space:pre-wrap"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-cupom')">Fechar</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/pdv.js"></script>
+</body>
+</html>

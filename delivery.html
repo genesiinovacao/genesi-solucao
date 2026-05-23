@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Delivery — SOLUÇÃO</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div><div class="page-title">🚴 Delivery Inteligente</div><div class="page-subtitle" id="empresa-nome">SOLUÇÃO</div></div>
+      </div>
+      <div class="top-bar-right">
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-header">
+        <h1><span class="h1-icon">🚴</span>Delivery</h1>
+        <div class="page-actions">
+          <button class="btn btn-secondary" onclick="simularWhatsApp()">📱 Notificar WhatsApp</button>
+          <button class="btn btn-primary" onclick="novoPedido()">➕ Novo Pedido</button>
+        </div>
+      </div>
+
+      <div class="kpi-grid" id="delivery-kpis"></div>
+
+      <!-- Kanban Board -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px" id="kanban-board">
+        <div>
+          <div style="font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-warning);display:inline-block"></span>
+            Pendentes <span class="badge badge-warning" id="cnt-pendente">0</span>
+          </div>
+          <div id="col-pendente" class="delivery-col"></div>
+        </div>
+        <div>
+          <div style="font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-info);display:inline-block"></span>
+            Preparando <span class="badge badge-info" id="cnt-preparando">0</span>
+          </div>
+          <div id="col-preparando" class="delivery-col"></div>
+        </div>
+        <div>
+          <div style="font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-primary);display:inline-block"></span>
+            Em Rota <span class="badge badge-primary" id="cnt-em_rota">0</span>
+          </div>
+          <div id="col-em_rota" class="delivery-col"></div>
+        </div>
+        <div>
+          <div style="font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--accent-success);display:inline-block"></span>
+            Entregues <span class="badge badge-success" id="cnt-entregue">0</span>
+          </div>
+          <div id="col-entregue" class="delivery-col"></div>
+        </div>
+      </div>
+
+      <!-- Integrations Banner -->
+      <div class="card" style="background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(6,182,212,.05));border-color:rgba(124,58,237,.3)">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:1rem;margin-bottom:4px">🔗 Integrações Disponíveis</div>
+            <div style="font-size:.8rem;color:var(--text-secondary)">Conecte com as maiores plataformas de delivery do Brasil</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="APP.toast('Integração iFood configurada! 🎉','success')">🛵 iFood Mercado</button>
+            <button class="btn btn-secondary" onclick="APP.toast('WhatsApp Business conectado! 📱','success')">📱 WhatsApp Business</button>
+            <button class="btn btn-secondary" onclick="APP.toast('Motoboy notificado! 🚴','info')">🚴 Motoboy App</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Novo Pedido -->
+<div class="modal-overlay" id="modal-pedido">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title">➕ Novo Pedido Delivery</span>
+      <button class="modal-close" onclick="APP.closeModal('modal-pedido')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cliente *</label><input type="text" class="form-control" id="d-cliente" placeholder="Nome do cliente"></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input type="text" class="form-control" id="d-telefone" placeholder="(11) 99999-0000"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Endereço de Entrega *</label><input type="text" class="form-control" id="d-endereco" placeholder="Rua, Número - Bairro"></div>
+    <div class="form-group"><label class="form-label">Itens do Pedido</label><textarea class="form-control" id="d-itens" rows="3" placeholder="Ex: Arroz 5kg, Feijão 1kg, Leite x3"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Total (R$) *</label><input type="number" class="form-control" id="d-total" placeholder="0,00" step="0.01" min="0"></div>
+      <div class="form-group"><label class="form-label">Pagamento</label>
+        <select class="form-control" id="d-pagamento"><option>Pix</option><option>Cartão</option><option>Dinheiro</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="APP.closeModal('modal-pedido')">Cancelar</button>
+      <button class="btn btn-primary" onclick="criarPedido()">🚴 Criar Pedido</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/delivery.js"></script>
+</body>
+</html>

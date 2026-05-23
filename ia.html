@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SOLUÇÃO IA — Assistente Inteligente</title>
+<link rel="stylesheet" href="css/main.css"><link rel="stylesheet" href="css/sidebar.css"><link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-content" id="main-content" style="display:flex;flex-direction:column">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="toggle-sidebar" id="toggle-sidebar">☰</button>
+        <div>
+          <div class="page-title">🤖 SOLUÇÃO IA</div>
+          <div class="page-subtitle" id="empresa-nome">Assistente Inteligente de Varejo</div>
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <span class="badge badge-success" style="animation:pulse 2s infinite">● Online</span>
+        <button class="notif-btn">🔔<span class="notif-badge" id="notif-badge">0</span></button>
+        <div class="user-avatar">JS</div>
+      </div>
+    </header>
+
+    <div class="ia-layout" style="flex:1">
+      <!-- Sidebar IA -->
+      <div class="ia-sidebar">
+        <div style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Consultas Rápidas</div>
+        <button class="ia-quick-action" onclick="quickAsk('Como está meu estoque hoje?')">📦 Status do Estoque</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quais produtos estão com estoque crítico?')">⚠️ Alertas de Estoque</button>
+        <button class="ia-quick-action" onclick="quickAsk('Qual foi o faturamento desta semana?')">💰 Faturamento da Semana</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quais são os produtos mais vendidos?')">🏆 Top Produtos</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quais clientes compraram mais?')">👥 Top Clientes</button>
+        <button class="ia-quick-action" onclick="quickAsk('Qual é minha margem de lucro média?')">📊 Margem de Lucro</button>
+        <button class="ia-quick-action" onclick="quickAsk('Tenho contas a pagar pendentes?')">💸 Contas Pendentes</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quais promoções estão ativas agora?')">🏷️ Promoções Ativas</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quantos pedidos de delivery estão em andamento?')">🚴 Pedidos Delivery</button>
+        <button class="ia-quick-action" onclick="quickAsk('Me dê sugestões para aumentar as vendas')">💡 Sugestões de Vendas</button>
+        <div class="divider"></div>
+        <div style="font-size:.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Análises Avançadas</div>
+        <button class="ia-quick-action" onclick="quickAsk('Analise meu desempenho completo do mês')">📈 Análise do Mês</button>
+        <button class="ia-quick-action" onclick="quickAsk('Quais produtos devo repor esta semana?')">🔄 Sugestão de Reposição</button>
+        <button class="ia-quick-action" onclick="quickAsk('Compare meu desempenho com a semana passada')">⚖️ Comparativo Semanal</button>
+        <button class="ia-quick-action" onclick="limparChat()">🗑️ Limpar Conversa</button>
+      </div>
+
+      <!-- Chat Area -->
+      <div class="ia-chat">
+        <div class="chat-messages" id="chat-messages">
+          <!-- Welcome message -->
+          <div style="text-align:center;padding:30px 20px">
+            <div style="font-size:3rem;margin-bottom:12px">🤖</div>
+            <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px">Olá! Sou a SOLUÇÃO IA</div>
+            <div style="font-size:.875rem;color:var(--text-secondary);max-width:400px;margin:0 auto">Seu assistente inteligente de varejo. Posso analisar dados de estoque, vendas, finanças e muito mais. O que deseja saber?</div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" class="chat-input" id="chat-input" placeholder="Pergunte sobre estoque, vendas, finanças..." onkeydown="if(event.key==='Enter')sendMessage()">
+          <button class="btn btn-primary" onclick="sendMessage()" id="btn-send">
+            <span id="send-icon">➤</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script><script src="js/app.js"></script><script src="js/ia.js"></script>
+</body>
+</html>
