@@ -1,41 +1,46 @@
 using System.Security.Claims;
+using Solucao.Backend.Services;
 
 namespace Solucao.Backend.Middleware;
 
-public class TenantMiddleware
+/// <summary>
+/// Reads the authenticated JWT, extracts tenant_id / user_id / role,
+/// and stores them in the scoped <see cref="ITenantContext"/> so the
+/// <see cref="Data.TenantConnectionInterceptor"/> can inject the correct
+/// app.current_tenant_id into Postgres for the RLS policies.
+///
+/// Runs AFTER UseAuthentication so HttpContext.User is already populated.
+/// </summary>
+public sealed class TenantMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly ILogger<TenantMiddleware> _log;
 
-    public TenantMiddleware(RequestDelegate next)
+    public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> log)
     {
         _next = next;
+        _log = log;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, ITenantContext tenant)
     {
-        // Resolve Tenant ID from Header or JWT Claim
-        string? tenantId = context.Request.Headers["X-Tenant-ID"];
-
-        if (string.IsNullOrEmpty(tenantId))
+        if (context.User.Identity?.IsAuthenticated == true)
         {
-            // Fallback: Try to get from User Claims if authenticated
-            tenantId = context.User.FindFirst("tenant_id")?.Value;
-        }
+            var tenantClaim = context.User.FindFirstValue(JwtService.TenantIdClaim);
+            var subClaim = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? context.User.FindFirstValue("sub");
+            var roleClaim = context.User.FindFirstValue(ClaimTypes.Role) ?? "manager";
 
-        if (!string.IsNullOrEmpty(tenantId))
-        {
-            // Store Tenant ID in HttpContext.Items for access in DB Context / Services
-            context.Items["TenantId"] = tenantId;
-
-            // Optional: Inject into PostgreSQL session variable for RLS
-            // This would be done in the DbContext or a dedicated DB service
-        }
-        else if (context.Request.Path.StartsWithSegments("/api/public") == false)
-        {
-            // If not a public route and no tenant found, block request
-            // context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            // await context.Response.WriteAsync("Tenant ID missing.");
-            // return;
+            if (Guid.TryParse(tenantClaim, out var tenantId) &&
+                Guid.TryParse(subClaim, out var userId))
+            {
+                tenant.SetContext(tenantId, userId, roleClaim);
+                _log.LogDebug("Tenant context resolved: tenant={TenantId} user={UserId}", tenantId, userId);
+            }
+            else
+            {
+                _log.LogWarning("Authenticated request without valid tenant_id/sub claim. Path={Path}", context.Request.Path);
+            }
         }
 
         await _next(context);

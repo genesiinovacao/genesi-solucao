@@ -1,177 +1,520 @@
-import React, { useState, useEffect } from 'react';
-import { Search, ShoppingCart, User, Wifi, WifiOff, Package, Trash2, CreditCard, Banknote, QrCode } from 'lucide-react';
-import SyncService from '../services/SyncService';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { auth, API_BASE } from '../lib/auth';
+import { cashSession } from '../lib/cashSession';
+import { printerPrefs } from '../lib/printerPrefs';
+import OpenCashModal from '../components/OpenCashModal';
+import CloseCashModal from '../components/CloseCashModal';
+import CashMovementModal from '../components/CashMovementModal';
+import ReturnSaleModal from '../components/ReturnSaleModal';
+import PrinterSettingsModal from '../components/PrinterSettingsModal';
+import PaymentModal from '../components/PaymentModal';
+import Receipt from '../components/Receipt';
 
-const PDV = () => {
+const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+
+export default function PDV() {
+  const navigate = useNavigate();
+  const user = auth.getUser();
+
+  // ===== Catalogue & cart =====
+  const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('Todos');
   const [cart, setCart] = useState([]);
-  const [search, setSearch] = useState("");
+  const [discountPct, setDiscountPct] = useState(0);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // ===== System state =====
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [category, setCategory] = useState("Todos");
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [pendingCount, setPendingCount] = useState(0);
+  const [toast, setToast] = useState(null);
 
-  // Mock de produtos (em um app real viria do SQLite local)
-  const products = [
-    { id: 1, name: "Arroz Branco 5kg", price: 19.90, stock: 150, emoji: "🍚", category: "Mercearia" },
-    { id: 2, name: "Feijão Carioca 1kg", price: 8.90, stock: 200, emoji: "🫘", category: "Mercearia" },
-    { id: 3, name: "Leite Integral 1L", price: 5.49, stock: 8, emoji: "🥛", category: "Laticínios" },
-    { id: 4, name: "Refrigerante 2L", price: 8.50, stock: 60, emoji: "🥤", category: "Bebidas" },
-  ];
+  // ===== Cash session =====
+  const [currentSession, setCurrentSession] = useState(null); // { id, openingAmount, openedAt, ... }
+  const [showOpenCash, setShowOpenCash] = useState(false);
+  const [showCloseCash, setShowCloseCash] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  useEffect(() => {
-    window.addEventListener('online', () => setIsOnline(true));
-    window.addEventListener('offline', () => setIsOnline(false));
-  }, []);
+  // ===== Modals =====
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+  const [showCashMovement, setShowCashMovement] = useState(false);
+  const [showReturnSale, setShowReturnSale] = useState(false);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+  const [lastSale, setLastSale] = useState(null); // exibe cupom após venda
 
-  const addToCart = (product) => {
-    const existing = cart.find(i => i.id === product.id);
-    if (existing) {
-      setCart(cart.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i));
-    } else {
-      setCart([...cart, { ...product, qty: 1 }]);
+  const searchRef = useRef(null);
+
+  // ---- Load catalogue from local SQLite ----
+  const loadLocal = async () => {
+    const [p, c, pending] = await Promise.all([
+      window.pdv.getProducts(),
+      window.pdv.getCustomers(),
+      window.pdv.getPendingSales(),
+    ]);
+    setProducts(p);
+    setCustomers(c);
+    setPendingCount(pending.length);
+  };
+
+  // ---- Probe backend for current cash session ----
+  const probeSession = async () => {
+    setCheckingSession(true);
+    try {
+      const { data } = await api.get('/api/cash-sessions/current');
+      if (data && data.id) {
+        setCurrentSession(data);
+        cashSession.set(data.id);
+      } else {
+        setCurrentSession(null);
+        cashSession.clear();
+        setShowOpenCash(true);
+      }
+    } catch (err) {
+      // Fallback: usa o último id conhecido localmente para permitir vendas offline
+      const fallback = cashSession.get();
+      if (fallback) setCurrentSession({ id: fallback, _offline: true });
+      else showToast('Offline: abra o caixa quando voltar online.', 'error', 5000);
+    } finally {
+      setCheckingSession(false);
     }
   };
 
-  const total = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+  useEffect(() => {
+    loadLocal();
+    probeSession();
+    const onOnline  = () => { setIsOnline(true); probeSession(); };
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+    // eslint-disable-next-line
+  }, []);
+
+  // ---- Background sync ----
+  const doSync = async () => {
+    if (!isOnline) return;
+    setSyncStatus('syncing');
+    try {
+      const r = await window.pdv.syncNow(API_BASE, auth.getAccessToken());
+      setSyncStatus(r?.ok ? 'ok' : 'error');
+    } catch { setSyncStatus('error'); }
+    const pending = await window.pdv.getPendingSales();
+    setPendingCount(pending.length);
+  };
+
+  useEffect(() => {
+    const t = setInterval(doSync, 30000);
+    if (isOnline) doSync();
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [isOnline]);
+
+  // ---- Keyboard shortcuts ----
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (showOpenCash || showCloseCash || showPayment || showCashMovement || showReturnSale || showPrinterSettings || lastSale) return;
+      if (!inField && /^[\w\d]$/.test(e.key)) searchRef.current?.focus();
+      if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === 'F10' && cart.length > 0) { e.preventDefault(); openPayment(); }
+      if (e.key === 'Escape') setCustomerPickerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line
+  }, [cart, showOpenCash, showCloseCash, showPayment, showCashMovement, showReturnSale, showPrinterSettings, lastSale]);
+
+  const categories = useMemo(() => {
+    const set = new Set(products.map((p) => p.category).filter(Boolean));
+    return ['Todos', ...Array.from(set).sort()];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchSearch = !s || p.name.toLowerCase().includes(s) || p.barcode === search.trim() || p.sku === search.trim();
+      const matchCat = category === 'Todos' || p.category === category;
+      return matchSearch && matchCat && p.is_active;
+    });
+  }, [products, search, category]);
+
+  const subtotal = cart.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  const discountAmount = subtotal * (Number(discountPct) || 0) / 100;
+  const total = Math.max(0, subtotal - discountAmount);
+
+  function showToast(text, kind = 'info', ms = 3000) {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), ms);
+  }
+
+  // ---- Cart ops ----
+  const addToCart = (p) => {
+    if (p.stock_quantity <= 0) return showToast(`${p.name} está sem estoque.`, 'error');
+    setCart((prev) => {
+      const found = prev.find((i) => i.productId === p.id);
+      if (found) {
+        if (found.quantity + 1 > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
+        return prev.map((i) => i.productId === p.id ? { ...i, quantity: i.quantity + 1, totalPrice: (i.quantity + 1) * i.unitPrice } : i);
+      }
+      return [...prev, {
+        productId: p.id, productName: p.name, emoji: p.emoji,
+        quantity: 1, unitPrice: p.sale_price, totalPrice: p.sale_price, discountAmount: 0,
+        stockAvailable: p.stock_quantity,
+      }];
+    });
+    setSearch('');
+  };
+
+  const updateQty = (productId, delta) => setCart((prev) =>
+    prev.flatMap((i) => {
+      if (i.productId !== productId) return [i];
+      const q = i.quantity + delta;
+      if (q <= 0) return [];
+      if (q > i.stockAvailable) { showToast(`Estoque máximo: ${i.stockAvailable}`, 'error'); return [i]; }
+      return [{ ...i, quantity: q, totalPrice: q * i.unitPrice }];
+    })
+  );
+
+  const removeItem = (id) => setCart((prev) => prev.filter((i) => i.productId !== id));
+  const clearCart = () => { setCart([]); setDiscountPct(0); setSelectedCustomer(null); };
+
+  // ---- Payment flow ----
+  const openPayment = () => {
+    if (!currentSession) return showToast('Abra o caixa antes de vender.', 'error');
+    if (cart.length === 0) return showToast('Carrinho vazio.', 'error');
+    setShowPayment(true);
+  };
+
+  const finalizeSale = async (paymentInfo) => {
+    setShowPayment(false);
+    const sale = {
+      offlineSyncId: crypto.randomUUID(),
+      saleDateIso: new Date().toISOString(),
+      customerId: selectedCustomer?.id ?? null,
+      customerName: selectedCustomer?.name ?? null,
+      cashSessionId: currentSession?.id ?? null,
+      subtotal,
+      discountAmount,
+      totalAmount: total,
+      paymentMethod: paymentInfo.paymentMethod,
+      amountReceived: paymentInfo.amountReceived,
+      changeAmount: paymentInfo.changeAmount,
+      items: cart.map((i) => ({
+        productId: i.productId,
+        productName: i.productName,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        discountAmount: 0,
+        totalPrice: i.totalPrice,
+      })),
+      payments: paymentInfo.payments,
+    };
+
+    try {
+      await window.pdv.saveSale(sale);
+      clearCart();
+      await loadLocal();
+      setLastSale(sale);
+      if (isOnline) doSync();
+
+      // Impressão automática silenciosa — se configurada.
+      const prefs = printerPrefs.get();
+      if (prefs.silent && prefs.auto) {
+        window.pdv.printReceiptSilent({
+          sale,
+          tenantName: user?.tenantName,
+          deviceName: prefs.deviceName || undefined,
+          copies: prefs.copies || 1,
+        }).then((r) => {
+          if (!r.ok) showToast(`Impressora: ${r.error}`, 'error');
+        });
+      }
+    } catch (err) {
+      showToast(`Erro ao salvar: ${err?.message || err}`, 'error');
+    }
+  };
+
+  // ---- Logout / close cash ----
+  const handleLogout = async () => {
+    if (cart.length > 0 && !confirm('Há itens no carrinho. Sair mesmo assim?')) return;
+    auth.clear();
+    cashSession.clear();
+    navigate('/login');
+  };
+
+  const stockBadge = (p) => {
+    if (p.stock_quantity <= 0) return 'bg-rose-500 text-white';
+    if (p.stock_quantity <= p.min_stock) return 'bg-amber-500 text-white';
+    return 'bg-emerald-600/30 text-emerald-300';
+  };
+
+  // Sessão é exigida para vender. Mostra modal de abertura se necessário.
+  const sessionLocked = !currentSession && !checkingSession;
 
   return (
-    <div className="flex h-screen bg-[#0f172a] text-slate-200 overflow-hidden font-sans">
-      {/* LEFT PANEL: PRODUCTS */}
-      <div className="flex-1 flex flex-col p-6 overflow-hidden">
-        <header className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Package size={24} />
+    <>
+    <div className="bg-slate-950 text-slate-100 no-print"
+         style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
+      {/* ===== LEFT: products. Padding-right reserva espaço pro aside fixed à direita ===== */}
+      <div className="grid"
+           style={{
+             position: 'absolute', top: 0, left: 0, bottom: 0, right: 440,
+             gridTemplateRows: 'auto auto minmax(0, 1fr)'
+           }}>
+        <header className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-900/50">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 w-10 h-10 rounded-lg flex items-center justify-center text-xl">🛒</div>
+            <div>
+              <h1 className="text-lg font-bold">SOLUÇÃO <span className="text-blue-400">2026</span></h1>
+              <p className="text-xs text-slate-400">{user?.tenantName}</p>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">SOLUÇÃO <span className="text-blue-500">2026</span></h1>
           </div>
-          
-          <div className="flex items-center gap-6 bg-[#1e293b] px-4 py-2 rounded-full border border-slate-700">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-              <span className="text-sm font-medium">{isOnline ? 'Cloud Online' : 'Modo Offline'}</span>
+          <div className="flex items-center gap-3 text-sm">
+            {currentSession && (
+              <>
+                <button onClick={() => setShowCashMovement(true)}
+                        className="px-3 py-1.5 bg-amber-900/40 text-amber-300 rounded-full text-xs hover:bg-amber-900/60">
+                  💵 Sangria/Suprimento
+                </button>
+                <button onClick={() => setShowReturnSale(true)}
+                        className="px-3 py-1.5 bg-rose-900/40 text-rose-300 rounded-full text-xs hover:bg-rose-900/60">
+                  ↩️ Devolução
+                </button>
+                <button onClick={() => setShowCloseCash(true)} className="px-3 py-1.5 bg-emerald-900/40 text-emerald-300 rounded-full text-xs hover:bg-emerald-900/60">
+                  💰 Caixa aberto · Fechar
+                </button>
+              </>
+            )}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${isOnline ? 'bg-emerald-900/40 text-emerald-300' : 'bg-rose-900/40 text-rose-300'}`}>
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 pulse-online' : 'bg-rose-400'}`} />
+              {isOnline ? 'Cloud Online' : 'Modo Offline'}
             </div>
-            <div className="h-4 w-[1px] bg-slate-700"></div>
-            <div className="flex items-center gap-2">
-              <User size={16} className="text-slate-400" />
-              <span className="text-sm">Operador: <span className="font-bold">João Silva</span></span>
-            </div>
+            {pendingCount > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-amber-900/40 text-amber-300 text-xs">
+                ⏳ {pendingCount} venda(s) na fila
+              </span>
+            )}
+            {syncStatus === 'syncing' && <span className="text-slate-400 text-xs">Sincronizando…</span>}
+            <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
+                    className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
+            <span className="text-slate-300">👤 {user?.name}</span>
+            <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm">🚪 Sair</button>
           </div>
         </header>
 
-        {/* SEARCH & FILTERS */}
-        <div className="flex gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input 
-              type="text" 
-              placeholder="Pesquisar produto ou código de barras (F2)..."
-              className="w-full bg-[#1e293b] border-none rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-blue-500 transition-all text-lg"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select 
-            className="bg-[#1e293b] border-none rounded-xl px-6 focus:ring-2 focus:ring-blue-500 text-lg cursor-pointer"
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option>Todos</option>
-            <option>Mercearia</option>
-            <option>Bebidas</option>
+        <div className="p-4 flex gap-3 border-b border-slate-800 bg-slate-900/30">
+          <input ref={searchRef} type="text" placeholder="🔍 Buscar / escanear código de barras (F2)…"
+                 value={search} onChange={(e) => setSearch(e.target.value)}
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter' && filteredProducts.length === 1) addToCart(filteredProducts[0]);
+                 }}
+                 className="flex-1 bg-slate-800 border border-slate-700 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none" />
+          <select value={category} onChange={(e) => setCategory(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 px-4 rounded-lg text-base focus:border-blue-500 focus:outline-none">
+            {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
         </div>
 
-        {/* PRODUCT GRID */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto pr-2 custom-scrollbar">
-          {products.map(p => (
-            <button 
-              key={p.id}
-              onClick={() => addToCart(p)}
-              className="bg-[#1e293b] p-4 rounded-2xl border border-transparent hover:border-blue-500 hover:bg-[#273549] transition-all group text-left relative overflow-hidden"
-            >
-              <span className="text-4xl mb-3 block">{p.emoji}</span>
-              <h3 className="font-bold text-lg mb-1 truncate">{p.name}</h3>
-              <p className="text-blue-400 font-black text-xl">R$ {p.price.toFixed(2)}</p>
-              <p className={`text-xs mt-2 ${p.stock < 10 ? 'text-rose-400 font-bold' : 'text-slate-500'}`}>
-                {p.stock} unidades em estoque
-              </p>
-              <div className="absolute top-2 right-2 bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
-                + Adicionar
-              </div>
-            </button>
-          ))}
+        <div className="min-h-0 overflow-y-auto p-4 custom-scrollbar">
+          {filteredProducts.length === 0 ? (
+            <p className="text-center text-slate-500 py-20">
+              {products.length === 0
+                ? 'Nenhum produto local. Saia e entre novamente para baixar o catálogo.'
+                : 'Nenhum produto encontrado.'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {filteredProducts.map((p) => (
+                <button key={p.id} onClick={() => addToCart(p)} disabled={p.stock_quantity <= 0}
+                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-4 text-left border border-transparent hover:border-blue-500 transition-all">
+                  <div className="text-3xl mb-2">{p.emoji}</div>
+                  <div className="font-semibold text-sm leading-tight mb-1 line-clamp-2">{p.name}</div>
+                  <div className="text-blue-400 font-bold text-lg">{brl(p.sale_price)}</div>
+                  <div className={`text-[10px] mt-1.5 inline-block px-2 py-0.5 rounded-full font-medium ${stockBadge(p)}`}>
+                    {p.stock_quantity <= 0 ? 'Zerado' : `${p.stock_quantity} ${p.unit}`}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* RIGHT PANEL: CART */}
-      <div className="w-[450px] bg-[#1e293b] border-l border-slate-800 flex flex-col p-6 shadow-2xl">
-        <div className="flex items-center gap-3 mb-8">
-          <ShoppingCart size={24} className="text-blue-500" />
-          <h2 className="text-xl font-bold">Carrinho de Venda</h2>
+      {/* ===== RIGHT: cart =====
+           position:fixed ancora o painel ao canto direito da tela,
+           garantindo que o footer (Total + botão Pagamento) NUNCA
+           desça nem desapareça, não importa quantos itens entrem. */}
+      <aside className="bg-slate-900 border-l border-slate-800 grid"
+             style={{
+               position: 'fixed', top: 0, right: 0, bottom: 0, width: 440,
+               gridTemplateRows: 'auto minmax(0, 1fr) auto',
+               overflow: 'hidden'
+             }}>
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <h2 className="font-bold text-lg">🛒 Carrinho ({cart.length})</h2>
+          <button onClick={() => setCustomerPickerOpen(true)} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg">
+            {selectedCustomer ? `👤 ${selectedCustomer.name.split(' ')[0]}` : '👤 Cliente'}
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto mb-6 pr-2 custom-scrollbar">
+        <div className="min-h-0 overflow-y-auto p-4 custom-scrollbar">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-50">
-              <ShoppingCart size={64} className="mb-4" />
-              <p className="text-lg">Carrinho vazio</p>
+            <div className="text-center text-slate-500 py-20">
+              <div className="text-5xl mb-3 opacity-40">🛒</div>
+              <p className="text-sm">Carrinho vazio.</p>
+              <p className="text-xs mt-1 text-slate-600">Clique em um produto ou escaneie.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {cart.map(item => (
-                <div key={item.id} className="bg-[#0f172a] p-4 rounded-xl flex items-center justify-between group">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{item.emoji}</span>
-                    <div>
-                      <h4 className="font-bold text-sm leading-tight">{item.name}</h4>
-                      <p className="text-xs text-slate-500">{item.qty}x R$ {item.price.toFixed(2)}</p>
-                    </div>
+            <div className="space-y-2">
+              {cart.map((i) => (
+                <div key={i.productId} className="bg-slate-950/50 p-3 rounded-lg flex items-center gap-3">
+                  <span className="text-2xl">{i.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{i.productName}</div>
+                    <div className="text-xs text-slate-400">{brl(i.unitPrice)} cada</div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="font-bold text-blue-400">R$ {(item.price * item.qty).toFixed(2)}</span>
-                    <button className="text-slate-600 hover:text-rose-500 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => updateQty(i.productId, -1)} className="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded text-sm">−</button>
+                    <span className="w-8 text-center font-bold">{i.quantity}</span>
+                    <button onClick={() => updateQty(i.productId, +1)} className="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded text-sm">+</button>
                   </div>
+                  <button onClick={() => removeItem(i.productId)} className="text-rose-400 hover:text-rose-300 text-xs ml-1">🗑️</button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* TOTALS & PAYMENT */}
-        <div className="bg-[#0f172a] p-6 rounded-3xl border border-slate-800 space-y-4">
-          <div className="flex justify-between text-slate-400">
+        <div className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/30">
+          <div className="flex justify-between text-sm text-slate-400">
             <span>Subtotal</span>
-            <span>R$ {total.toFixed(2)}</span>
+            <span>{brl(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-slate-400">
-            <span>Desconto (F5)</span>
-            <span className="text-emerald-500">- R$ 0,00</span>
+          <div className="flex justify-between items-center text-sm">
+            <label className="text-slate-400">Desconto (%)</label>
+            <input type="number" min="0" max="100" step="0.5" value={discountPct}
+                   onChange={(e) => setDiscountPct(e.target.value)}
+                   className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-mono" />
           </div>
-          <div className="h-[1px] bg-slate-800"></div>
-          <div className="flex justify-between items-end">
-            <span className="text-lg font-bold">TOTAL</span>
-            <span className="text-4xl font-black text-blue-500">R$ {total.toFixed(2)}</span>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-2 pt-4">
-            <button className="flex flex-col items-center justify-center gap-2 bg-[#1e293b] p-3 rounded-2xl hover:bg-slate-700 transition-colors">
-              <Banknote size={20} /> <span className="text-[10px] font-bold">DINHEIRO</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-2 bg-[#1e293b] p-3 rounded-2xl hover:bg-slate-700 transition-colors">
-              <CreditCard size={20} /> <span className="text-[10px] font-bold">CARTÃO</span>
-            </button>
-            <button className="flex flex-col items-center justify-center gap-2 bg-[#1e293b] p-3 rounded-2xl hover:bg-slate-700 transition-colors">
-              <QrCode size={20} /> <span className="text-[10px] font-bold">PIX</span>
-            </button>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-xs text-emerald-400">
+              <span>Desconto</span>
+              <span>- {brl(discountAmount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-end pt-2 border-t border-slate-800">
+            <span className="text-sm font-medium">TOTAL</span>
+            <span className="text-3xl font-extrabold text-blue-400">{brl(total)}</span>
           </div>
 
-          <button className="w-full bg-blue-600 hover:bg-blue-500 py-5 rounded-2xl font-black text-xl shadow-lg shadow-blue-900/20 transition-all mt-4 transform active:scale-95">
-            FINALIZAR VENDA (F10)
+          <button onClick={openPayment} disabled={cart.length === 0}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold py-4 rounded-xl text-lg shadow-lg shadow-emerald-900/30">
+            💳 Pagamento · F10
           </button>
+          {cart.length > 0 && (
+            <button onClick={clearCart} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
+              Cancelar venda
+            </button>
+          )}
         </div>
-      </div>
-    </div>
-  );
-};
+      </aside>
 
-export default PDV;
+      {/* ===== Modais ===== */}
+      {sessionLocked && showOpenCash && <OpenCashModal onOpened={(s) => { setCurrentSession(s); setShowOpenCash(false); }} />}
+
+      {showCloseCash && currentSession && (
+        <CloseCashModal
+          sessionId={currentSession.id}
+          syncBeforeClose={doSync}
+          onClose={() => setShowCloseCash(false)}
+          onClosed={() => { handleLogout(); }}
+        />
+      )}
+
+      {showPayment && (
+        <PaymentModal total={total} onCancel={() => setShowPayment(false)} onConfirm={finalizeSale} />
+      )}
+
+      {showCashMovement && currentSession && (
+        <CashMovementModal
+          sessionId={currentSession.id}
+          onClose={() => setShowCashMovement(false)}
+          onDone={({ type, amount }) => {
+            setShowCashMovement(false);
+            showToast(
+              `${type === 'withdraw' ? 'Sangria' : 'Suprimento'} de ${brl(amount)} registrado.`,
+              'success'
+            );
+          }}
+        />
+      )}
+
+      {showReturnSale && (
+        <ReturnSaleModal
+          onClose={() => setShowReturnSale(false)}
+          onDone={(ret) => {
+            setShowReturnSale(false);
+            const credit = ret.customerCreditAfter != null
+              ? ` · Crédito do cliente: ${brl(ret.customerCreditAfter)}`
+              : '';
+            showToast(`Devolução ${brl(ret.totalRefund)} registrada${credit}.`, 'success', 5000);
+            loadLocal();
+          }}
+        />
+      )}
+
+      {showPrinterSettings && (
+        <PrinterSettingsModal onClose={() => setShowPrinterSettings(false)} />
+      )}
+
+      {customerPickerOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-6 z-50" onClick={() => setCustomerPickerOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+            <header className="p-5 border-b border-slate-800 flex justify-between items-center">
+              <h3 className="font-bold">👤 Selecionar cliente</h3>
+              <button onClick={() => { setSelectedCustomer(null); setCustomerPickerOpen(false); }}
+                      className="text-xs text-slate-400 hover:text-slate-200">Limpar seleção</button>
+            </header>
+            <div className="flex-1 overflow-auto p-2 custom-scrollbar">
+              {customers.length === 0 && <p className="text-center text-slate-500 py-10 text-sm">Sem clientes locais.</p>}
+              {customers.map((c) => (
+                <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerPickerOpen(false); }}
+                        className="block w-full text-left px-4 py-3 hover:bg-slate-800 rounded">
+                  <div className="font-medium">{c.name}</div>
+                  <div className="text-xs text-slate-400">{c.tax_id || c.phone || '—'} · {c.loyalty_points} pts</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl border z-50 no-print ${
+          toast.kind === 'success' ? 'bg-emerald-900 border-emerald-600 text-emerald-100' :
+          toast.kind === 'error'   ? 'bg-rose-900 border-rose-600 text-rose-100' :
+                                     'bg-slate-800 border-slate-600 text-slate-100'
+        }`}>
+          {toast.text}
+        </div>
+      )}
+    </div>
+
+    {/* Renderizado FORA do .no-print para que .receipt-print apareça na impressão */}
+    {lastSale && (
+      <Receipt sale={lastSale}
+               onClose={() => setLastSale(null)}
+               onPrint={() => window.print()} />
+    )}
+    </>
+  );
+}

@@ -1,101 +1,137 @@
-import React from 'react';
-import { Card, Grid, Title, Text, TabGroup, TabList, Tab, TabPanels, TabPanel, AreaChart, BarChart, DonutChart, BadgeDelta, Flex, Metric } from "@tremor/react";
+import { useEffect, useState } from 'react';
+import { Card, Title, Text, AreaChart, DonutChart, BadgeDelta, Metric } from '@tremor/react';
+import { api } from '../lib/api';
 
-const Dashboard = () => {
-  const data = [
-    { date: "May 10", Sales: 2840.50, Target: 3500 },
-    { date: "May 11", Sales: 3120.80, Target: 3500 },
-    { date: "May 12", Sales: 2950.30, Target: 3500 },
-    { date: "May 13", Sales: 3800.00, Target: 3500 },
-    { date: "May 14", Sales: 4200.00, Target: 3500 },
-    { date: "May 15", Sales: 3950.00, Target: 3500 },
-  ];
+const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
-  const categories = [
-    { name: "Alimentos", value: 4500, color: "blue" },
-    { name: "Limpeza", value: 1200, color: "cyan" },
-    { name: "Higiene", value: 800, color: "indigo" },
-  ];
+export default function Dashboard() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: res } = await api.get('/api/dashboard/summary');
+        setData(res);
+      } catch (err) {
+        setError(err.response?.data?.error || err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) return <main className="p-10 text-slate-500">Carregando dashboard…</main>;
+  if (error)   return <main className="p-10 text-red-700">⚠️ {error}</main>;
+  if (!data)   return null;
+
+  const trend = data.salesChangePercent > 0 ? 'moderateIncrease'
+              : data.salesChangePercent < 0 ? 'moderateDecrease' : 'unchanged';
+
+  const sales7 = data.salesLast7Days.map((p) => ({
+    Dia: new Date(p.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+    Vendas: p.total,
+  }));
+
+  const categories = data.salesByCategory.map((c) => ({ name: c.category, value: c.total }));
 
   return (
-    <main className="p-12 bg-slate-50 min-h-screen">
-      <div className="flex justify-between items-center mb-10">
+    <main className="p-8 max-w-7xl mx-auto">
+      <div className="flex justify-between items-start mb-8">
         <div>
-          <Title className="text-3xl font-bold text-slate-800">Dashboard Administrativo</Title>
-          <Text className="text-slate-500">Bem-vindo, Joelson Silva. Aqui está o resumo de todos os PDVs.</Text>
+          <h1 className="text-2xl font-bold text-slate-800">📊 Dashboard</h1>
+          <Text className="text-slate-500 mt-1">Resumo em tempo real (RLS isola por tenant).</Text>
         </div>
-        <BadgeDelta deltaType="moderateIncrease" className="px-4 py-2">
-          +12.5% vs mês anterior
+        <BadgeDelta deltaType={trend} className="px-3 py-1.5">
+          {data.salesChangePercent > 0 ? '+' : ''}{data.salesChangePercent.toFixed(1)}% vs. ontem
         </BadgeDelta>
       </div>
 
-      <Grid numItemsSm={2} numItemsLg={4} className="gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         <Card decoration="top" decorationColor="blue">
-          <Text>Vendas Hoje</Text>
-          <Metric>R$ 3.950,00</Metric>
+          <Text>💰 Vendas Hoje</Text>
+          <Metric className="mt-1">{brl(data.salesToday)}</Metric>
+          <Text className="text-xs mt-2">{data.salesCountToday} venda(s)</Text>
         </Card>
-        <Card decoration="top" decorationColor="green">
-          <Text>Ticket Médio</Text>
-          <Metric>R$ 82,29</Metric>
+        <Card decoration="top" decorationColor="emerald">
+          <Text>🎯 Ticket Médio</Text>
+          <Metric className="mt-1">{brl(data.averageTicketToday)}</Metric>
+          <Text className="text-xs mt-2">por venda hoje</Text>
         </Card>
-        <Card decoration="top" decorationColor="amber">
-          <Text>Estoque Crítico</Text>
-          <Metric>12 itens</Metric>
+        <Card decoration="top" decorationColor={data.lowStockCount > 0 ? 'amber' : 'slate'}>
+          <Text>📦 Estoque Crítico</Text>
+          <Metric className="mt-1">{data.lowStockCount}</Metric>
+          <Text className="text-xs mt-2">produto(s) abaixo do mínimo</Text>
         </Card>
         <Card decoration="top" decorationColor="indigo">
-          <Text>PDVs Ativos</Text>
-          <Metric>5 / 5</Metric>
+          <Text>👥 Clientes Ativos</Text>
+          <Metric className="mt-1">{data.customerCount}</Metric>
+          <Text className="text-xs mt-2">{data.activeDeliveries} delivery(s) em andamento</Text>
         </Card>
-      </Grid>
+      </div>
 
-      <Grid numItemsLg={3} className="gap-6">
-        <Card className="col-span-2">
-          <Title>Performance de Vendas (Real vs Meta)</Title>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+        <Card className="lg:col-span-2">
+          <Title>Vendas — últimos 7 dias</Title>
           <AreaChart
-            className="h-80 mt-4"
-            data={data}
-            index="date"
-            categories={["Sales", "Target"]}
-            colors={["blue", "slate"]}
-            valueFormatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`}
-            yAxisWidth={60}
+            className="h-72 mt-4"
+            data={sales7}
+            index="Dia"
+            categories={["Vendas"]}
+            colors={["blue"]}
+            valueFormatter={brl}
+            yAxisWidth={70}
+            showLegend={false}
           />
         </Card>
-
         <Card>
-          <Title>Vendas por Categoria</Title>
-          <DonutChart
-            className="h-80 mt-4"
-            data={categories}
-            category="value"
-            index="name"
-            colors={["blue", "cyan", "indigo"]}
-            valueFormatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`}
-          />
+          <Title>Vendas por categoria</Title>
+          <Text className="text-xs">últimos 30 dias</Text>
+          {categories.length === 0 ? (
+            <p className="text-sm text-slate-500 mt-10 text-center">Ainda sem vendas registradas.</p>
+          ) : (
+            <DonutChart
+              className="h-64 mt-4"
+              data={categories}
+              category="value"
+              index="name"
+              valueFormatter={brl}
+            />
+          )}
         </Card>
-      </Grid>
+      </div>
 
-      <Card className="mt-6">
-        <Title>Relatório de Fluxo por Horário (Heatmap Simulado)</Title>
-        <BarChart
-          className="h-72 mt-4"
-          data={[
-            { hour: "08:00", count: 12 },
-            { hour: "10:00", count: 35 },
-            { hour: "12:00", count: 89 },
-            { hour: "14:00", count: 42 },
-            { hour: "16:00", count: 67 },
-            { hour: "18:00", count: 120 },
-            { hour: "20:00", count: 45 },
-          ]}
-          index="hour"
-          categories={["count"]}
-          colors={["blue"]}
-          showLegend={false}
-        />
+      <Card>
+        <Title>🚨 Produtos com estoque baixo</Title>
+        <Text className="text-xs">precisam de reposição</Text>
+        {data.lowStockProducts.length === 0 ? (
+          <p className="text-sm text-emerald-600 mt-6 text-center py-6">✅ Nenhum produto crítico no momento.</p>
+        ) : (
+          <table className="w-full text-sm mt-4">
+            <thead className="text-xs text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="text-left py-2">Produto</th>
+                <th className="text-right">Estoque atual</th>
+                <th className="text-right">Mínimo</th>
+                <th className="text-right">Falta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.lowStockProducts.map((p) => (
+                <tr key={p.id}>
+                  <td className="py-2 text-slate-700">
+                    <span className="mr-2">{p.emoji}</span>{p.name}
+                  </td>
+                  <td className="text-right font-semibold text-red-600">{p.stockQuantity}</td>
+                  <td className="text-right text-slate-600">{p.minStock}</td>
+                  <td className="text-right font-bold text-amber-600">{Math.max(0, p.minStock - p.stockQuantity)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Card>
     </main>
   );
-};
-
-export default Dashboard;
+}

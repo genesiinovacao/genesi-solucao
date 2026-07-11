@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: solucao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: solucao
+      POSTGRES_USER: solucao_admin
+      POSTGRES_PASSWORD: solucao_dev_admin_pwd
+    ports:
+      - "5432:5432"
+    volumes:
+      - solucao_pgdata:/var/lib/postgresql/data
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/02_roles.sql:/docker-entrypoint-initdb.d/02_roles.sql:ro
+      - ./database/03_seed.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
+      - ./database/04_functions.sql:/docker-entrypoint-initdb.d/04_functions.sql:ro
+      - ./database/05_tenant_columns.sql:/docker-entrypoint-initdb.d/05_tenant_columns.sql:ro
+      - ./database/06_cash_session_link.sql:/docker-entrypoint-initdb.d/06_cash_session_link.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solucao_admin -d solucao"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: solucao-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@solucao.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - solucao_pgadmin:/var/lib/pgadmin
+
+volumes:
+  solucao_pgdata:
+  solucao_pgadmin:

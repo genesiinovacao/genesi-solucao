@@ -1,0 +1,63 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Solucao.Backend.Data;
+using Solucao.Backend.Models.Dtos.Settings;
+using Solucao.Backend.Services;
+
+namespace Solucao.Backend.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("api/settings")]
+public class SettingsController : ControllerBase
+{
+    private readonly AppDbContext _db;
+    private readonly ITenantContext _tenant;
+
+    public SettingsController(AppDbContext db, ITenantContext tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
+
+    // The "tenants" table has no RLS (it's the control plane), so we
+    // filter explicitly by the authenticated tenant_id every time.
+
+    [HttpGet]
+    public async Task<ActionResult<TenantSettingsDto>> Get(CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return Unauthorized();
+
+        var t = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == tenantId, ct);
+        if (t is null) return NotFound();
+
+        return Ok(new TenantSettingsDto(
+            t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji));
+    }
+
+    [HttpPut]
+    public async Task<ActionResult<TenantSettingsDto>> Update([FromBody] UpdateTenantSettingsRequest req, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return Unauthorized();
+        if (_tenant.Role != "admin") return Forbid();
+
+        var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == tenantId, ct);
+        if (t is null) return NotFound();
+
+        t.Name = req.Name;
+        t.Phone = req.Phone;
+        t.Email = req.Email;
+        t.Address = req.Address;
+        t.DailySalesTarget = req.DailySalesTarget;
+        t.TaxRegime = req.TaxRegime;
+        t.LogoEmoji = req.LogoEmoji;
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new TenantSettingsDto(
+            t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji));
+    }
+}

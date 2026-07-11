@@ -1,91 +1,137 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Solucao.Backend.Models;
+using Microsoft.EntityFrameworkCore;
 using Solucao.Backend.Data;
+using Solucao.Backend.Models.Entities;
+using Solucao.Backend.Services;
 
 namespace Solucao.Backend.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Authorize]
+[Route("api/sync")]
 public class SyncController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly AppDbContext _db;
+    private readonly ITenantContext _tenant;
+    private readonly ILogger<SyncController> _log;
 
-    public SyncController(AppDbContext context)
+    public SyncController(AppDbContext db, ITenantContext tenant, ILogger<SyncController> log)
     {
-        _context = context;
+        _db = db;
+        _tenant = tenant;
+        _log = log;
     }
 
+    /// <summary>
+    /// Receives a batch of sales captured offline by the PDV (Electron + SQLite).
+    /// Idempotent via OfflineSyncId: duplicates are silently skipped.
+    /// </summary>
     [HttpPost("sales")]
-    public async Task<IActionResult> SyncSales([FromBody] List<SaleSyncDto> salesToSync)
+    public async Task<ActionResult<IReadOnlyList<SyncResult>>> SyncSales(
+        [FromBody] List<SaleSyncDto> salesToSync,
+        CancellationToken ct)
     {
-        if (salesToSync == null || !salesToSync.Any())
-            return BadRequest("Nenhuma venda para sincronizar.");
+        if (_tenant.TenantId is not { } tenantId) return Unauthorized();
+        if (salesToSync is null || salesToSync.Count == 0)
+            return BadRequest(new { error = "Nenhuma venda para sincronizar." });
 
-        var tenantId = HttpContext.Items["TenantId"] as string;
-        var results = new List<SyncResult>();
+        var results = new List<SyncResult>(salesToSync.Count);
+        var incomingIds = salesToSync.Select(s => s.OfflineSyncId).ToList();
 
-        foreach (var saleDto in salesToSync)
+        var existingIds = await _db.Sales
+            .Where(s => s.OfflineSyncId != null && incomingIds.Contains(s.OfflineSyncId.Value))
+            .Select(s => s.OfflineSyncId!.Value)
+            .ToListAsync(ct);
+
+        var existingSet = existingIds.ToHashSet();
+
+        foreach (var dto in salesToSync)
         {
-            try 
+            if (existingSet.Contains(dto.OfflineSyncId))
             {
-                // 1. Verificar se a venda já existe (evitar duplicidade por ID de sincronia offline)
-                var exists = _context.Sales.Any(s => s.OfflineSyncId == saleDto.OfflineSyncId);
-                
-                if (!exists)
-                {
-                    // 2. Mapear DTO para Entidade de Venda
-                    var sale = new Sale 
-                    {
-                        TenantId = Guid.Parse(tenantId),
-                        OfflineSyncId = saleDto.OfflineSyncId,
-                        TotalAmount = saleDto.TotalAmount,
-                        SaleDate = saleDto.SaleDate,
-                        PaymentMethod = saleDto.PaymentMethod,
-                        Items = saleDto.Items.Select(i => new SaleItem {
-                            ProductId = i.ProductId,
-                            Quantity = i.Quantity,
-                            UnitPrice = i.UnitPrice
-                        }).ToList()
-                    };
+                results.Add(new SyncResult(dto.OfflineSyncId, "AlreadySynced", null));
+                continue;
+            }
 
-                    _context.Sales.Add(sale);
-                    results.Add(new SyncResult { OfflineSyncId = saleDto.OfflineSyncId, Status = "Success" });
-                }
-                else 
+            try
+            {
+                var sale = new Sale
                 {
-                    results.Add(new SyncResult { OfflineSyncId = saleDto.OfflineSyncId, Status = "AlreadySynced" });
-                }
+                    TenantId = tenantId,
+                    UserId = _tenant.UserId,
+                    CustomerId = dto.CustomerId,
+                    OfflineSyncId = dto.OfflineSyncId,
+                    CashSessionId = dto.CashSessionId,
+                    SaleDate = dto.SaleDate,
+                    Subtotal = dto.Subtotal,
+                    DiscountAmount = dto.DiscountAmount,
+                    TotalAmount = dto.TotalAmount,
+                    PaymentMethod = dto.PaymentMethod,
+                    AmountReceived = dto.AmountReceived,
+                    ChangeAmount = dto.ChangeAmount,
+                    PosTerminalId = dto.PosTerminalId,
+                    Status = "completed",
+                    Items = dto.Items.Select(i => new SaleItem
+                    {
+                        TenantId = tenantId,
+                        ProductId = i.ProductId,
+                        ProductName = i.ProductName,
+                        Quantity = i.Quantity,
+                        UnitPrice = i.UnitPrice,
+                        DiscountAmount = i.DiscountAmount,
+                        TotalPrice = i.TotalPrice
+                    }).ToList(),
+                    Payments = dto.Payments?.Select(p => new SalePayment
+                    {
+                        TenantId = tenantId,
+                        Method = p.Method,
+                        Amount = p.Amount,
+                        AuthorizationCode = p.AuthorizationCode
+                    }).ToList() ?? new()
+                };
+
+                _db.Sales.Add(sale);
+                results.Add(new SyncResult(dto.OfflineSyncId, "Success", null));
             }
             catch (Exception ex)
             {
-                results.Add(new SyncResult { OfflineSyncId = saleDto.OfflineSyncId, Status = "Error", Message = ex.Message });
+                _log.LogError(ex, "Failed to map sale {OfflineSyncId}", dto.OfflineSyncId);
+                results.Add(new SyncResult(dto.OfflineSyncId, "Error", ex.Message));
             }
         }
 
-        await _context.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
         return Ok(results);
     }
 }
 
-public class SaleSyncDto
-{
-    public Guid OfflineSyncId { get; set; }
-    public decimal TotalAmount { get; set; }
-    public DateTime SaleDate { get; set; }
-    public string PaymentMethod { get; set; }
-    public List<SaleItemSyncDto> Items { get; set; }
-}
+public record SaleSyncDto(
+    Guid OfflineSyncId,
+    Guid? CustomerId,
+    DateTime SaleDate,
+    decimal Subtotal,
+    decimal DiscountAmount,
+    decimal TotalAmount,
+    string PaymentMethod,
+    decimal? AmountReceived,
+    decimal? ChangeAmount,
+    string? PosTerminalId,
+    Guid? CashSessionId,
+    List<SaleItemSyncDto> Items,
+    List<SalePaymentSyncDto>? Payments);
 
-public class SaleItemSyncDto
-{
-    public Guid ProductId { get; set; }
-    public decimal Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
-}
+public record SaleItemSyncDto(
+    Guid? ProductId,
+    string ProductName,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal DiscountAmount,
+    decimal TotalPrice);
 
-public class SyncResult
-{
-    public Guid OfflineSyncId { get; set; }
-    public string Status { get; set; }
-    public string Message { get; set; }
-}
+public record SalePaymentSyncDto(
+    string Method,
+    decimal Amount,
+    string? AuthorizationCode);
+
+public record SyncResult(Guid OfflineSyncId, string Status, string? Message);
