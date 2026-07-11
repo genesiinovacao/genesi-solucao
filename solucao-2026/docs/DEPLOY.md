@@ -70,15 +70,29 @@ Caminho de custo zero para o piloto, com migração fácil para VPS única depoi
    **volte ao Render** para colocá-la em `Cors__AllowedOrigins__0`.
 4. Acesse `/register` e cadastre o primeiro mercado real.
 
-## 4. PDV no mercado
+## 4. PDV no mercado (instalador)
 
-Na máquina do PDV, antes de rodar/empacotar, crie `pdv/.env`:
+O PDV é distribuído como instalador Windows. Para gerar:
 
+```powershell
+cd pdv
+npm run dist
 ```
-VITE_API_URL=https://solucao-backend.onrender.com
-```
 
-O CORS do PDV (`app://.`) já está liberado no `render.yaml`.
+Sai em `pdv/release/SOLUCAO-PDV-Setup-<versão>.exe`. A URL da API embutida vem
+de [`pdv/.env.production`](../pdv/.env.production) (hoje aponta para o Render);
+mude lá e regenere se o backend trocar de endereço.
+
+**Na máquina do cliente:** rodar o instalador (2 cliques, sem opções), abrir
+"SOLUÇÃO PDV" e logar com o usuário do mercado. O primeiro login precisa de
+internet (baixa o catálogo); depois o PDV opera offline e sincroniza sozinho.
+
+Notas:
+- O instalador não é assinado digitalmente — o Windows SmartScreen pode exibir
+  "aplicativo não reconhecido"; clique em "Mais informações → Executar assim
+  mesmo". Assinatura de código (certificado) é um passo futuro.
+- Dados locais ficam em `%APPDATA%\SOLUCAO PDV\data.db`.
+- O CORS do PDV empacotado (`app://.`) já está liberado no `render.yaml`.
 
 ---
 

@@ -79,6 +79,8 @@ pgdata/
 .env
 .env.*
 !.env.example
+# URL pública da API embutida no instalador do PDV — não é segredo
+!pdv/.env.production
 *.pem
 *.key
 *.pfx
