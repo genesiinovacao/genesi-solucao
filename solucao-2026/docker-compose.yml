@@ -17,6 +17,9 @@ services:
       - ./database/04_functions.sql:/docker-entrypoint-initdb.d/04_functions.sql:ro
       - ./database/05_tenant_columns.sql:/docker-entrypoint-initdb.d/05_tenant_columns.sql:ro
       - ./database/06_cash_session_link.sql:/docker-entrypoint-initdb.d/06_cash_session_link.sql:ro
+      - ./database/07_sale_returns.sql:/docker-entrypoint-initdb.d/07_sale_returns.sql:ro
+      - ./database/08_fiscal_documents.sql:/docker-entrypoint-initdb.d/08_fiscal_documents.sql:ro
+      - ./database/09_tenant_registration.sql:/docker-entrypoint-initdb.d/09_tenant_registration.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U solucao_admin -d solucao"]
       interval: 5s

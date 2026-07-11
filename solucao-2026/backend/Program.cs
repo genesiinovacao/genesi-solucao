@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using Solucao.Backend.Data;
 using Solucao.Backend.Hubs;
 using Solucao.Backend.Middleware;
@@ -10,6 +11,12 @@ using Solucao.Backend.Services;
 using Solucao.Backend.Services.Fiscal;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Logs estruturados (console; agregadores de log de qualquer host leem stdout)
+builder.Host.UseSerilog((ctx, cfg) => cfg
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console());
 
 // ---------------------------------------------------------------------------
 // Services
@@ -30,8 +37,10 @@ builder.Services.AddSingleton<IFiscalProvider>(sp =>
 
 builder.Services.AddDbContext<AppDbContext>((sp, opt) =>
 {
-    var cs = builder.Configuration.GetConnectionString("AppDb")
-             ?? throw new InvalidOperationException("ConnectionStrings:AppDb missing");
+    var cs = builder.Configuration.GetConnectionString("AppDb");
+    if (string.IsNullOrWhiteSpace(cs))
+        throw new InvalidOperationException(
+            "ConnectionStrings:AppDb ausente. Em produção, defina a variável de ambiente ConnectionStrings__AppDb.");
 
     opt.UseNpgsql(cs);
     opt.AddInterceptors(sp.GetRequiredService<TenantConnectionInterceptor>());
@@ -44,8 +53,10 @@ builder.Services.AddDbContext<AppDbContext>((sp, opt) =>
 });
 
 // JWT
-var jwtKey = builder.Configuration["Jwt:Key"]
-             ?? throw new InvalidOperationException("Jwt:Key missing");
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException(
+        "Jwt:Key ausente. Em produção, defina a variável de ambiente Jwt__Key com um segredo aleatório de 64+ caracteres.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "solucao-backend";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "solucao-clients";
 
@@ -125,6 +136,8 @@ builder.Services.AddSwaggerGen(c =>
 // Pipeline
 // ---------------------------------------------------------------------------
 var app = builder.Build();
+
+app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
 {

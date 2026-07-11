@@ -8,7 +8,8 @@ Plataforma de gestão de varejo com arquitetura híbrida:
 - **PDV:** Electron + React + SQLite (offline-first), sincroniza com o backend via `OfflineSyncId` idempotente
 
 > **Status:** Fases 1–3 entregues — backend, dashboard e PDV rodam ponta a ponta.
-> Em andamento: integrações reais (Fase 4) e deploy/observabilidade (Fase 5).
+> Fase 5 em andamento: cadastro self-service de mercado, segredos via ambiente,
+> Dockerfile + compose de produção. Fase 4 (integrações reais) aguarda piloto.
 
 ---
 
@@ -129,6 +130,41 @@ SELECT count(*) FROM products;
 -- Tentar inserir no tenant errado: deve falhar com
 -- ERROR: new row violates row-level security policy
 ```
+
+---
+
+## 🏪 Cadastro de mercado (onboarding)
+
+Não é preciso mexer no banco para criar um mercado novo:
+
+- **Pela tela**: `http://localhost:5173/register` — cria o tenant + usuário admin e já entra logado.
+- **Pela API**: `POST /api/auth/register` com `{ tenantName, cnpj, userName, email, password }`.
+
+Regras: CNPJ com 14 dígitos e único; e-mail único **globalmente** (o login localiza
+o tenant pelo e-mail). A criação roda na função `app_register_tenant`
+(SECURITY DEFINER, `09_tenant_registration.sql`), pois não existe contexto de
+tenant para o RLS antes de o tenant existir.
+
+---
+
+## 🚢 Deploy em produção
+
+```bash
+cp .env.example .env    # preencha os segredos (JWT_KEY, senhas, origem do dashboard)
+docker compose -f docker-compose.prod.yml up -d --build
+# após a PRIMEIRA subida, troque a senha do role da aplicação:
+docker exec -it solucao-postgres psql -U solucao_admin -d solucao \
+  -c "ALTER ROLE solucao_app PASSWORD '<POSTGRES_APP_PASSWORD do .env>'"
+```
+
+- O backend **exige** `ConnectionStrings__AppDb` e `Jwt__Key` via ambiente — não há
+  segredo commitado; sem eles o processo não sobe.
+- O Postgres não publica porta no host e o backend só escuta em `127.0.0.1:5160` —
+  coloque um reverse proxy com HTTPS na frente (Caddy: `reverse_proxy localhost:5160`).
+- O seed demo (`03_seed.sql`) fica de fora do compose de produção.
+- Logs estruturados via Serilog no stdout (`docker logs solucao-backend`).
+- O dashboard é estático: `npm run build` e hospede o `dist/` (Vercel/Netlify/Nginx)
+  com `VITE_API_URL` apontando para a API.
 
 ---
 
