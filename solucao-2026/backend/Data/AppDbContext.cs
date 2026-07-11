@@ -25,6 +25,7 @@ public class AppDbContext : DbContext
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashMovement> CashMovements => Set<CashMovement>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -229,6 +230,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             e.Property(x => x.Metadata).HasColumnType("jsonb");
+        });
+
+        b.Entity<FiscalDocument>(e =>
+        {
+            e.ToTable("fiscal_documents");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
+            e.HasIndex(x => new { x.TenantId, x.DocumentType, x.Series, x.Number }).IsUnique();
         });
     }
 }

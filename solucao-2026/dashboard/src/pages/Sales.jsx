@@ -29,6 +29,48 @@ export default function Sales() {
 
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [fiscalDoc, setFiscalDoc] = useState(null);
+  const [fiscalBusy, setFiscalBusy] = useState(false);
+
+  const loadFiscal = async (saleId) => {
+    try {
+      const { data: d } = await api.get(`/api/fiscal/sales/${saleId}`);
+      setFiscalDoc(d);
+    } catch { setFiscalDoc(null); }
+  };
+
+  const emitFiscal = async (saleId) => {
+    setFiscalBusy(true);
+    try {
+      const { data: d } = await api.post(`/api/fiscal/sales/${saleId}/emit`, { documentType: 'nfce' });
+      setFiscalDoc(d);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    } finally { setFiscalBusy(false); }
+  };
+
+  const downloadXml = async () => {
+    try {
+      const { data: xml } = await api.get(`/api/fiscal/documents/${fiscalDoc.id}/xml`, { responseType: 'text' });
+      const url = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }));
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
+  const cancelFiscal = async () => {
+    const reason = prompt('Justificativa do cancelamento (mínimo 15 caracteres):');
+    if (!reason) return;
+    setFiscalBusy(true);
+    try {
+      const { data: d } = await api.post(`/api/fiscal/documents/${fiscalDoc.id}/cancel`, { reason });
+      setFiscalDoc(d);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    } finally { setFiscalBusy(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -56,9 +98,11 @@ export default function Sales() {
   const openDetail = async (id) => {
     setDetailLoading(true);
     setSelected({ id });
+    setFiscalDoc(null);
     try {
       const { data: d } = await api.get(`/api/sales/${id}`);
       setSelected(d);
+      loadFiscal(id);
     } catch (err) {
       alert(err.response?.data?.error || err.message);
       setSelected(null);
@@ -203,6 +247,52 @@ export default function Sales() {
                     <div className="flex justify-between text-lg font-bold text-slate-800 pt-2 border-t mt-2">
                       <span>Total</span><span>{brl(selected.totalAmount)}</span>
                     </div>
+                  </div>
+
+                  <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <h3 className="font-semibold text-slate-700 text-sm mb-2">📄 Documento Fiscal (NFC-e)</h3>
+                    {!fiscalDoc ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-slate-500">Nenhum documento emitido para esta venda.</p>
+                        {selected.status !== 'cancelled' && (
+                          <button onClick={() => emitFiscal(selected.id)} disabled={fiscalBusy}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
+                            {fiscalBusy ? 'Emitindo…' : 'Emitir NFC-e'}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span>
+                            {fiscalDoc.status === 'authorized' && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ Autorizada</span>}
+                            {fiscalDoc.status === 'cancelled' && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Cancelada</span>}
+                            {fiscalDoc.status === 'rejected' && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Rejeitada</span>}
+                            <span className="ml-2 text-slate-600">nº {fiscalDoc.number} · série {fiscalDoc.series}</span>
+                            {fiscalDoc.environment === 'homologation' && (
+                              <span className="ml-2 text-xs text-amber-600" title="Documento simulado — sem valor fiscal">🧪 homologação</span>
+                            )}
+                          </span>
+                          <span className="flex gap-2 shrink-0">
+                            <button onClick={downloadXml} className="text-blue-600 hover:underline text-xs">Ver XML</button>
+                            {fiscalDoc.status === 'authorized' && (
+                              <button onClick={cancelFiscal} disabled={fiscalBusy}
+                                      className="text-red-600 hover:underline text-xs disabled:opacity-50">Cancelar</button>
+                            )}
+                            {fiscalDoc.status === 'rejected' && (
+                              <button onClick={() => emitFiscal(selected.id)} disabled={fiscalBusy}
+                                      className="text-indigo-600 hover:underline text-xs disabled:opacity-50">Reemitir</button>
+                            )}
+                          </span>
+                        </div>
+                        {fiscalDoc.accessKey && (
+                          <p className="text-xs text-slate-400 font-mono break-all">Chave: {fiscalDoc.accessKey}</p>
+                        )}
+                        {fiscalDoc.rejectionReason && (
+                          <p className="text-xs text-slate-500">Motivo: {fiscalDoc.rejectionReason}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

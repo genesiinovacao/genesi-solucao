@@ -6,6 +6,7 @@ using Microsoft.OpenApi.Models;
 using Solucao.Backend.Data;
 using Solucao.Backend.Middleware;
 using Solucao.Backend.Services;
+using Solucao.Backend.Services.Fiscal;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,15 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddScoped<TenantConnectionInterceptor>();
+
+// Fiscal: provider selecionado por config. Só existe o simulado por enquanto —
+// um gateway real (Focus NFe, PlugNotas, ...) entra aqui como novo case.
+builder.Services.AddSingleton<IFiscalProvider>(sp =>
+    builder.Configuration.GetValue("Fiscal:Provider", "simulated") switch
+    {
+        "simulated" => new SimulatedFiscalProvider(),
+        var other => throw new InvalidOperationException($"Fiscal provider desconhecido: {other}"),
+    });
 
 builder.Services.AddDbContext<AppDbContext>((sp, opt) =>
 {
