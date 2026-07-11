@@ -14,12 +14,14 @@ public class SyncController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IStockAlertService _stockAlerts;
     private readonly ILogger<SyncController> _log;
 
-    public SyncController(AppDbContext db, ITenantContext tenant, ILogger<SyncController> log)
+    public SyncController(AppDbContext db, ITenantContext tenant, IStockAlertService stockAlerts, ILogger<SyncController> log)
     {
         _db = db;
         _tenant = tenant;
+        _stockAlerts = stockAlerts;
         _log = log;
     }
 
@@ -148,6 +150,17 @@ public class SyncController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+
+        // Após o commit: alerta em tempo real (SignalR) para produtos críticos
+        try
+        {
+            await _stockAlerts.CheckAndNotifyAsync(tenantId, productIds, ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao enviar alertas de estoque (sync segue OK)");
+        }
+
         return Ok(results);
     }
 }

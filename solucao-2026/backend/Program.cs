@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Solucao.Backend.Data;
+using Solucao.Backend.Hubs;
 using Solucao.Backend.Middleware;
 using Solucao.Backend.Services;
 using Solucao.Backend.Services.Fiscal;
@@ -63,6 +64,22 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+
+        // SignalR (WebSocket/SSE) não envia header Authorization — o cliente
+        // manda o JWT em ?access_token= e ele é aceito apenas nas rotas /hubs.
+        opt.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var accessToken = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    ctx.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    ctx.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -73,6 +90,10 @@ var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<st
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins(corsOrigins).AllowAnyMethod().AllowAnyHeader().AllowCredentials()));
+
+// SignalR — alertas de estoque em tempo real
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IStockAlertService, StockAlertService>();
 
 // MVC + Swagger
 builder.Services.AddControllers();
@@ -121,6 +142,7 @@ app.UseMiddleware<TenantMiddleware>();   // runs AFTER auth, BEFORE authorize
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<StockHub>("/hubs/stock");
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }))
    .AllowAnonymous();

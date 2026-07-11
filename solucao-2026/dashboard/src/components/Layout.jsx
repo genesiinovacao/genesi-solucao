@@ -1,10 +1,26 @@
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../lib/auth';
+import { createStockConnection } from '../lib/stockHub';
 
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = auth.getUser();
+  const [stockAlerts, setStockAlerts] = useState([]);
+
+  // Alertas de estoque em tempo real (SignalR)
+  useEffect(() => {
+    const conn = createStockConnection();
+    conn.on('LowStock', (alerts) => {
+      const stamped = alerts.map((a) => ({ ...a, _key: `${a.productId}-${Date.now()}` }));
+      setStockAlerts((prev) => [...prev, ...stamped].slice(-5));
+      stamped.forEach((a) =>
+        setTimeout(() => setStockAlerts((prev) => prev.filter((x) => x._key !== a._key)), 12000));
+    });
+    conn.start().catch(() => { /* backend offline — reconexão automática cuida */ });
+    return () => { conn.stop(); };
+  }, []);
 
   const handleLogout = () => {
     auth.clear();
@@ -77,6 +93,26 @@ export default function Layout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+
+      {stockAlerts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">
+          {stockAlerts.map((a) => (
+            <div key={a._key}
+                 className="bg-amber-50 border border-amber-300 rounded-xl shadow-lg p-4 text-sm flex gap-3 items-start">
+              <span className="text-xl">⚠️</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-amber-900">Estoque crítico: {a.name}</p>
+                <p className="text-amber-700 text-xs mt-0.5">
+                  Restam {a.stockQuantity} (mínimo {a.minStock})
+                  {a.daysRemaining != null && ` · ruptura em ~${a.daysRemaining} dia(s)`}
+                </p>
+              </div>
+              <button onClick={() => setStockAlerts((prev) => prev.filter((x) => x._key !== a._key))}
+                      className="text-amber-400 hover:text-amber-700">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
