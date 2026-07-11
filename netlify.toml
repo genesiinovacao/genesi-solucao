@@ -1,0 +1,16 @@
+# ============================================================================
+# Netlify — dashboard SOLUÇÃO 2026
+# Conecte o repositório em https://app.netlify.com → Add new site → Import.
+# Defina a variável de ambiente VITE_API_URL no painel do Netlify apontando
+# para a URL do backend no Render (ex.: https://solucao-backend.onrender.com).
+# ============================================================================
+[build]
+  base    = "solucao-2026/dashboard"
+  command = "npm run build"
+  publish = "dist"
+
+# SPA: qualquer rota (ex.: /register, /sales) cai no index.html do React Router
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

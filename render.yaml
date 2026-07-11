@@ -1,0 +1,32 @@
+# ============================================================================
+# Render Blueprint — backend SOLUÇÃO 2026
+# Conecte o repositório em https://dashboard.render.com → New → Blueprint
+# e o Render cria o serviço a partir deste arquivo.
+# ============================================================================
+services:
+  - type: web
+    name: solucao-backend
+    runtime: docker
+    rootDir: solucao-2026/backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Connection string DIRETA do Neon (não a "pooled"! o pooler em modo
+      # transação quebra o contexto de tenant do RLS). Formato:
+      # Host=<host>.neon.tech;Port=5432;Database=solucao;Username=solucao_app;Password=<senha>;SSL Mode=Require;Pooling=true;Maximum Pool Size=10
+      - key: ConnectionStrings__AppDb
+        sync: false          # preencher no painel do Render (é segredo)
+      - key: Jwt__Key
+        generateValue: true  # o Render gera um segredo aleatório forte
+      # Origem do dashboard no Netlify, ex.: https://solucao2026.netlify.app
+      - key: Cors__AllowedOrigins__0
+        sync: false
+      - key: Cors__AllowedOrigins__1
+        value: "app://."
+      - key: Fiscal__Provider
+        value: simulated
+      - key: Fiscal__Environment
+        value: homologation
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production

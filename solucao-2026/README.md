@@ -147,7 +147,14 @@ tenant para o RLS antes de o tenant existir.
 
 ---
 
-## 🚢 Deploy em produção
+## 🚢 Deploy
+
+**Caminho gratuito (piloto):** Neon (Postgres) + Render (backend) + Netlify
+(dashboard) — passo a passo completo em [docs/DEPLOY.md](docs/DEPLOY.md).
+Os blueprints [`render.yaml`](../render.yaml) e [`netlify.toml`](../netlify.toml)
+estão na raiz do repositório.
+
+### VPS única (produção definitiva)
 
 ```bash
 cp .env.example .env    # preencha os segredos (JWT_KEY, senhas, origem do dashboard)
