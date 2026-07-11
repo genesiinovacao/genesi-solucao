@@ -28,8 +28,8 @@ function getDb() {
 }
 
 // Snapshot of the products/customers that arrived from the backend during the
-// last bootstrap. local_sales is the offline write-ahead log that the
-// SyncService drains when the PDV is online again.
+// last bootstrap. local_sales is the offline write-ahead log that
+// electron/sync.cjs drains when the PDV is online again.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS products (
     id              TEXT PRIMARY KEY,

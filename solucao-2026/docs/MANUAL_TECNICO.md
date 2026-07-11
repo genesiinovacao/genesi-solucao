@@ -11,7 +11,7 @@ O sistema mudou de uma aplicação HTML/JS simples para uma arquitetura **Híbri
 
 ## 2. Configuração do Banco de Dados (PostgreSQL)
 A segurança dos 100 clientes é garantida pelo **RLS**.
-1. Execute o script em `database/schema.sql`.
+1. Execute os scripts numerados em `database/` (`01_schema.sql` … `07_sale_returns.sql`) — o `docker compose up` aplica todos automaticamente na primeira subida.
 2. Para cada conexão, o backend define a variável de sessão:
    ```sql
    SET app.current_tenant_id = 'id-do-cliente-aqui';
@@ -21,7 +21,7 @@ A segurança dos 100 clientes é garantida pelo **RLS**.
 ## 3. Fluxo de Sincronização (Offline-First)
 O PDV Desktop deve ser a "fonte da verdade" local.
 - **Vendas**: São salvas no SQLite local com `synced: false`.
-- **SyncService**: O serviço monitora o evento `online`. Ao detectar internet, envia o lote de vendas pendentes para `/api/sync/sales`.
+- **Sincronização** (`pdv/electron/sync.cjs`): drena as vendas pendentes (`synced = 0`) do SQLite e envia o lote para `/api/sync/sales` com JWT.
 - **Idempotência**: Sempre use o `OfflineSyncId` (UUID) gerado no PDV para evitar duplicidade de vendas no servidor central.
 
 ## 4. Desenvolvimento do Frontend (Dashboard)
@@ -49,4 +49,4 @@ npm run dev
 
 ## 7. Segurança (LGPD)
 - Todas as comunicações devem usar **TLS 1.3**.
-- O `TenantId` nunca deve ser exposto na URL, apenas via Claims de JWT ou Headers seguros.
+- O `TenantId` nunca deve ser exposto na URL nem em headers — ele viaja exclusivamente na claim `tenant_id` do JWT (o header `X-Tenant-ID` foi removido).

@@ -2,12 +2,13 @@
 
 Plataforma de gestão de varejo com arquitetura híbrida:
 
-- **Backend:** .NET 8 Web API
+- **Backend:** .NET Web API (JWT + refresh tokens, RLS por tenant)
 - **Banco:** PostgreSQL 16 com **Row Level Security (RLS)** para isolamento por tenant
 - **Dashboard:** React + Vite + Tailwind + Tremor
 - **PDV:** Electron + React + SQLite (offline-first), sincroniza com o backend via `OfflineSyncId` idempotente
 
-> **Status:** Fase 0 — fundações. Banco, schema multi-tenant e infra Docker prontos. Backend e frontends ainda não rodam ponta a ponta.
+> **Status:** Fases 1–3 entregues — backend, dashboard e PDV rodam ponta a ponta.
+> Em andamento: integrações reais (Fase 4) e deploy/observabilidade (Fase 5).
 
 ---
 
@@ -16,24 +17,27 @@ Plataforma de gestão de varejo com arquitetura híbrida:
 ```
 solucao-2026/
 ├── docker-compose.yml          # Postgres 16 + pgAdmin
-├── backend/                    # API .NET 8
-│   ├── Solucao.Backend.csproj
-│   ├── Program.cs
-│   ├── appsettings.json
-│   ├── appsettings.Development.json
-│   ├── Controllers/
-│   ├── Middleware/
-│   └── Properties/launchSettings.json
-├── dashboard/                  # React admin (web)
-│   ├── package.json
-│   └── src/{pages,styles}
-├── pdv/                        # Electron PDV (desktop)
-│   └── src/{pages,services}
+├── backend/                    # API .NET
+│   ├── Program.cs              # JWT Bearer, CORS, Swagger, pipeline auth → tenant
+│   ├── Controllers/            # 16 controllers (Auth, Products, Sales, Sync, Cash, ...)
+│   ├── Middleware/             # TenantMiddleware (claims JWT → ITenantContext)
+│   ├── Data/                   # AppDbContext + TenantConnectionInterceptor (RLS)
+│   ├── Models/                 # Entities + DTOs por módulo
+│   └── Services/               # JwtService, TenantContext
+├── dashboard/                  # React admin (web) — 13 páginas conectadas à API
+│   └── src/{pages,components,lib}
+├── pdv/                        # Electron PDV (desktop, offline-first)
+│   ├── electron/               # main, preload, db (SQLite), sync, print
+│   └── src/{pages,components,lib}
 ├── database/
 │   ├── 01_schema.sql           # DDL: tabelas, índices, triggers, RLS
 │   ├── 02_roles.sql            # Role `solucao_app` (sem BYPASSRLS)
 │   ├── 03_seed.sql             # 2 tenants demo para validar isolamento
-│   └── schema.sql              # ⚠️ legado da v0; pode ser removido
+│   ├── 04_functions.sql        # Funções auxiliares
+│   ├── 05_tenant_columns.sql   # Migração incremental
+│   ├── 06_cash_session_link.sql
+│   └── 07_sale_returns.sql
+├── tools/HashGen/              # Gerador de hash de senha (BCrypt)
 └── docs/MANUAL_TECNICO.md
 ```
 
@@ -43,7 +47,7 @@ solucao-2026/
 
 ### Pré-requisitos
 - Docker Desktop
-- .NET 8 SDK
+- .NET SDK 8+
 - Node.js 20+
 
 ### 1. Subir o banco
@@ -57,60 +61,23 @@ Isso vai subir:
 - **Postgres** em `localhost:5432` (db `solucao`, admin `solucao_admin` / `solucao_dev_admin_pwd`)
 - **pgAdmin** em `http://localhost:5050` (login `admin@solucao.com` / `admin`)
 
-Na primeira subida o Postgres executa em ordem:
-1. `01_schema.sql` — cria todas as tabelas + RLS
-2. `02_roles.sql` — cria o role `solucao_app` que o backend usa
-3. `03_seed.sql` — popula 2 tenants demo
+Na primeira subida o Postgres executa os scripts `database/01…07` em ordem.
 
 > Se precisar reaplicar o schema do zero: `docker compose down -v && docker compose up -d`
 > (o `-v` apaga o volume `solucao_pgdata`; ⚠️ destrutivo)
 
-### 2. Validar o RLS (o teste mais importante desta fase)
-
-Conecte como o role da aplicação (não como `solucao_admin` — esse é superuser e ignora RLS):
-
-```powershell
-docker exec -it solucao-postgres psql -U solucao_app -d solucao
-```
-
-Dentro do `psql`:
-
-```sql
--- Sem contexto: deve devolver 0
-SELECT count(*) FROM products;
-
--- Tenant 1 (Mercado do João): 10 produtos
-SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
-SELECT count(*) FROM products;
-SELECT name, stock_quantity FROM products LIMIT 3;
-
--- Tenant 2 (Padaria da Ana): 3 produtos
-SET app.current_tenant_id = '22222222-2222-2222-2222-222222222222';
-SELECT count(*) FROM products;
-
--- Tentar inserir no tenant errado: deve falhar
-SET app.current_tenant_id = '22222222-2222-2222-2222-222222222222';
-INSERT INTO products (tenant_id, name, cost_price, sale_price)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Hack', 1, 1);
--- ERROR:  new row violates row-level security policy for table "products"
-```
-
-Se todos os passos acima funcionaram, **o isolamento está garantido**.
-
-### 3. Backend (próxima fase)
+### 2. Backend
 
 ```powershell
 cd backend
-dotnet restore
 dotnet run
 ```
 
-> Hoje ainda não compila — faltam `Models/`, `Data/AppDbContext`, `AuthController`, etc.
-> Esses arquivos virão na Fase 1.
+- API HTTP em `http://localhost:5160`
+- Swagger em `http://localhost:5160/swagger`
+- Health check em `http://localhost:5160/health`
 
-Swagger ficará em `https://localhost:7160/swagger`.
-
-### 4. Dashboard (próxima fase)
+### 3. Dashboard
 
 ```powershell
 cd dashboard
@@ -120,9 +87,36 @@ npm run dev
 
 Abre em `http://localhost:5173`.
 
-### 5. PDV (Fase 3)
+### 4. PDV Electron
 
-Ainda não está empacotado como Electron — só tem páginas React isoladas. Cobrirei isso na Fase 3.
+```powershell
+cd pdv
+npm install     # roda electron-rebuild do better-sqlite3 no postinstall
+npm run dev     # abre a janela nativa (Vite em 5174)
+```
+
+SQLite local em `%APPDATA%\solucao-pdv\data.db` — apagar o arquivo zera o cache;
+o bootstrap rebaixa tudo do backend no próximo login.
+
+### Validar o RLS
+
+Conecte como o role da aplicação (não como `solucao_admin` — esse é superuser e ignora RLS):
+
+```powershell
+docker exec -it solucao-postgres psql -U solucao_app -d solucao
+```
+
+```sql
+-- Sem contexto: deve devolver 0
+SELECT count(*) FROM products;
+
+-- Tenant 1 (Mercado do João): 10 produtos
+SET app.current_tenant_id = '11111111-1111-1111-1111-111111111111';
+SELECT count(*) FROM products;
+
+-- Tentar inserir no tenant errado: deve falhar com
+-- ERROR: new row violates row-level security policy
+```
 
 ---
 
@@ -130,16 +124,25 @@ Ainda não está empacotado como Electron — só tem páginas React isoladas. C
 
 1. Cliente loga → backend devolve JWT contendo a claim `tenant_id`.
 2. Toda request seguinte traz `Authorization: Bearer <jwt>`.
-3. O `TenantMiddleware` (ou o interceptor do `AppDbContext`) lê o claim e executa, **dentro da mesma transação**:
+3. O `TenantMiddleware` lê as claims e popula o `ITenantContext` (scoped).
+4. O `TenantConnectionInterceptor` executa, dentro da mesma transação:
    ```sql
    SET LOCAL app.current_tenant_id = '<uuid>';
    ```
-4. As policies de RLS (`tenant_isolation`) filtram automaticamente todo `SELECT/INSERT/UPDATE/DELETE`.
-5. Mesmo um SQL injection bem-sucedido não pode vazar dados de outro tenant — o filtro é no banco, não na aplicação.
+5. As policies de RLS (`tenant_isolation`) filtram automaticamente todo `SELECT/INSERT/UPDATE/DELETE`.
+6. Mesmo um SQL injection bem-sucedido não pode vazar dados de outro tenant — o filtro é no banco, não na aplicação.
 
 **Por que `SET LOCAL` e não `SET`:** `SET LOCAL` morre no fim da transação, garantindo que conexões reaproveitadas pelo pool não vazem contexto entre requests.
 
 **Por que o role `solucao_app` não pode ser superuser nem `BYPASSRLS`:** caso contrário, as policies seriam ignoradas e o isolamento quebra. Esse é o erro de configuração mais comum em sistemas multi-tenant com RLS.
+
+---
+
+## 🔄 Sincronização offline do PDV
+
+- Vendas são gravadas no SQLite local (`local_sales`, coluna `synced`).
+- `electron/sync.cjs` drena as pendentes para `POST /api/sync/sales` com JWT.
+- O `SyncController` é idempotente por `OfflineSyncId` (UUID gerado no PDV) — reenvios não duplicam vendas.
 
 ---
 
@@ -148,10 +151,10 @@ Ainda não está empacotado como Electron — só tem páginas React isoladas. C
 | Fase | Entrega | Status |
 |------|---------|--------|
 | **0** | Fundações: docker-compose, schema completo, RLS, role app | ✅ Pronto |
-| **1** | Backend MVP: Models, AppDbContext, JWT, CRUD básico, SyncController funcional | ⏳ Próxima |
-| **2** | Dashboard web: login + Estoque + Clientes + Dashboard + demais módulos | ⏳ |
-| **3** | PDV Electron real: SQLite + sincronização + impressão + leitor de barras | ⏳ |
-| **4** | Integrações reais: NFC-e, Pix dinâmico, WhatsApp, LLM | ⏳ |
+| **1** | Backend MVP: Models, AppDbContext, JWT, CRUD básico, SyncController funcional | ✅ Pronto |
+| **2** | Dashboard web: login + Estoque + Clientes + Dashboard + demais módulos | ✅ Pronto |
+| **3** | PDV Electron real: SQLite + sincronização + impressão + leitor de barras | ✅ Pronto |
+| **4** | Integrações reais: NFC-e, Pix dinâmico, WhatsApp, LLM | ⏳ Em andamento |
 | **5** | Deploy + observabilidade: HTTPS, logs, métricas, CI/CD | ⏳ |
 
 ---
@@ -165,6 +168,10 @@ Após o seed, ambos os tenants têm usuários com senha `123456`:
 | Mercado do João | `admin@mercadojoao.com` | admin |
 | Mercado do João | `caixa@mercadojoao.com` | cashier |
 | Padaria da Ana | `admin@padariaana.com` | admin |
+
+UUIDs fixos (úteis em queries diretas):
+- Tenant 1: `11111111-1111-1111-1111-111111111111`
+- Tenant 2: `22222222-2222-2222-2222-222222222222`
 
 ---
 
