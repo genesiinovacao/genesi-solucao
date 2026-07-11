@@ -24,7 +24,8 @@ Aplicação HTML5 + CSS3 + JS Vanilla + Chart.js (CDN), **sem servidor**, persis
 Estrutura: `backend/` (.NET 8/9 Web API), `dashboard/` (React + Tailwind + Tremor), `pdv/` (Electron + React + SQLite offline-first), `database/schema.sql` (PostgreSQL com Row Level Security via `app.current_tenant_id`), `docker-compose.yml`, `tools/`, `docs/`, `README.md`.
 
 - Sincronização idempotente via `OfflineSyncId` (UUID).
-- Estágio: começou como esqueleto; **verificar o estado atual antes de assumir o que roda**.
+- Estágio (jul/2026): **Fases 1–3 prontas e rodando ponta a ponta** — backend completo (JWT+refresh, RLS, 16+ controllers), dashboard com 13 páginas na API real, PDV Electron offline-first com baixa de estoque no servidor. Também prontos: relatórios com margem/curva ABC, módulo fiscal NFC-e com provider plugável (simulado por padrão — `Fiscal:Provider` no appsettings), SignalR de alertas de estoque (`/hubs/stock`) e `backend.Tests/` (xUnit, roda sem Postgres).
+- Migração `database/08_fiscal_documents.sql` precisa ser aplicada manualmente em banco já criado (scripts do Docker só rodam na primeira subida): `docker exec -i solucao-postgres psql -U solucao_admin -d solucao < database/08_fiscal_documents.sql`.
 
 ---
 
