@@ -37,6 +37,7 @@ solucao-2026/
 │   ├── 05_tenant_columns.sql   # Migração incremental
 │   ├── 06_cash_session_link.sql
 │   └── 07_sale_returns.sql
+├── backend.Tests/              # Testes xUnit (JWT, sync, fiscal)
 ├── tools/HashGen/              # Gerador de hash de senha (BCrypt)
 └── docs/MANUAL_TECNICO.md
 ```
@@ -97,6 +98,17 @@ npm run dev     # abre a janela nativa (Vite em 5174)
 
 SQLite local em `%APPDATA%\solucao-pdv\data.db` — apagar o arquivo zera o cache;
 o bootstrap rebaixa tudo do backend no próximo login.
+
+### Testes do backend
+
+```powershell
+cd backend.Tests
+dotnet test
+```
+
+Cobrem JWT (emissão/claims/refresh), sincronização do PDV (idempotência,
+baixa de estoque, estoque negativo) e o módulo fiscal (numeração, chave de
+acesso, cancelamento). Rodam em memória — não precisam de Postgres.
 
 ### Validar o RLS
 
