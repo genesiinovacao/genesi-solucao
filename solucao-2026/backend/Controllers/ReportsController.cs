@@ -148,4 +148,88 @@ public class ReportsController : ControllerBase
             bestDay, bestRev,
             dailySeries, topProducts, topCustomers, byCategory));
     }
+
+    /// <summary>
+    /// Margem por produto + curva ABC (A = 80% do faturamento acumulado,
+    /// B = até 95%, C = o restante). O custo usa o CostPrice atual do produto —
+    /// o histórico de custo não é rastreado.
+    /// </summary>
+    [HttpGet("product-performance")]
+    public async Task<ActionResult<ProductPerformanceDto>> ProductPerformance(
+        [FromQuery] int period = 30,
+        CancellationToken ct = default)
+    {
+        if (period <= 0) period = 30;
+        if (period > 365) period = 365;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var from  = today.AddDays(-(period - 1));
+        var fromDt = DateTime.SpecifyKind(from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        var toDt   = DateTime.SpecifyKind(today.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+
+        var items = await _db.SaleItems.AsNoTracking()
+            .Join(_db.Sales.AsNoTracking().Where(s => s.Status == "completed" && s.SaleDate >= fromDt && s.SaleDate < toDt),
+                  si => si.SaleId, s => s.Id,
+                  (si, s) => new { si.ProductId, si.ProductName, si.Quantity, si.TotalPrice })
+            .ToListAsync(ct);
+
+        var productIds = items.Where(i => i.ProductId != null).Select(i => i.ProductId!.Value).Distinct().ToList();
+        var productInfo = productIds.Count == 0
+            ? new Dictionary<Guid, (decimal Cost, string? Category)>()
+            : await _db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => (p.CostPrice, p.Category), ct);
+
+        var grouped = items
+            .GroupBy(i => new { i.ProductId, i.ProductName })
+            .Select(g =>
+            {
+                var qty = g.Sum(x => x.Quantity);
+                var revenue = g.Sum(x => x.TotalPrice);
+                var (costPrice, category) = g.Key.ProductId is { } pid && productInfo.TryGetValue(pid, out var info)
+                    ? info : (0m, null);
+                var cost = Math.Round(qty * costPrice, 2);
+                var profit = revenue - cost;
+                return new
+                {
+                    g.Key.ProductId,
+                    Name = g.Key.ProductName,
+                    Category = category ?? "Sem categoria",
+                    Quantity = qty,
+                    Revenue = revenue,
+                    Cost = cost,
+                    Profit = profit,
+                };
+            })
+            .OrderByDescending(p => p.Revenue)
+            .ToList();
+
+        var totalRevenue = grouped.Sum(p => p.Revenue);
+        var totalCost = grouped.Sum(p => p.Cost);
+        var totalProfit = totalRevenue - totalCost;
+
+        var products = new List<ProductPerformanceItemDto>(grouped.Count);
+        decimal cumulative = 0m;
+        int countA = 0, countB = 0, countC = 0;
+        foreach (var p in grouped)
+        {
+            var share = totalRevenue > 0 ? Math.Round(p.Revenue / totalRevenue * 100m, 2) : 0m;
+            cumulative += share;
+            var cls = cumulative <= 80m ? "A" : cumulative <= 95m ? "B" : "C";
+            if (cls == "A") countA++; else if (cls == "B") countB++; else countC++;
+
+            products.Add(new ProductPerformanceItemDto(
+                p.ProductId, p.Name, p.Category,
+                p.Quantity, p.Revenue, p.Cost, p.Profit,
+                p.Revenue > 0 ? Math.Round(p.Profit / p.Revenue * 100m, 2) : 0m,
+                share, Math.Round(Math.Min(cumulative, 100m), 2), cls));
+        }
+
+        return Ok(new ProductPerformanceDto(
+            period, from, today,
+            totalRevenue, totalCost, totalProfit,
+            totalRevenue > 0 ? Math.Round(totalProfit / totalRevenue * 100m, 2) : 0m,
+            countA, countB, countC,
+            products));
+    }
 }

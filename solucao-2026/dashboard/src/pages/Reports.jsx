@@ -8,6 +8,7 @@ const fmtDate = (d) => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit',
 export default function Reports() {
   const [period, setPeriod] = useState(7);
   const [data, setData] = useState(null);
+  const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -16,8 +17,12 @@ export default function Reports() {
       setLoading(true);
       setError('');
       try {
-        const { data: res } = await api.get('/api/reports/sales-overview', { params: { period } });
+        const [{ data: res }, { data: perfRes }] = await Promise.all([
+          api.get('/api/reports/sales-overview', { params: { period } }),
+          api.get('/api/reports/product-performance', { params: { period } }),
+        ]);
         setData(res);
+        setPerf(perfRes);
       } catch (err) {
         setError(err.response?.data?.error || err.message);
       } finally { setLoading(false); }
@@ -146,6 +151,75 @@ export default function Reports() {
           </div>
         )}
       </Card>
+
+      {perf && perf.products.length > 0 && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <Card decoration="top" decorationColor="emerald">
+              <Text>💵 Lucro Bruto</Text>
+              <Metric className="mt-1 !text-xl">{brl(perf.totalProfit)}</Metric>
+              <Text className="text-xs mt-2">custo estimado {brl(perf.totalCost)}</Text>
+            </Card>
+            <Card decoration="top" decorationColor="violet">
+              <Text>📊 Margem Média</Text>
+              <Metric className="mt-1 !text-xl">{perf.marginPercent.toFixed(1)}%</Metric>
+              <Text className="text-xs mt-2">sobre o faturamento</Text>
+            </Card>
+            <Card decoration="top" decorationColor="blue">
+              <Text>🅰️ Produtos Classe A</Text>
+              <Metric className="mt-1 !text-xl">{perf.classACount}</Metric>
+              <Text className="text-xs mt-2">geram 80% do faturamento</Text>
+            </Card>
+            <Card decoration="top" decorationColor="slate">
+              <Text>🅱️/🅲 Classes B e C</Text>
+              <Metric className="mt-1 !text-xl">{perf.classBCount + perf.classCCount}</Metric>
+              <Text className="text-xs mt-2">{perf.classBCount} B · {perf.classCCount} C</Text>
+            </Card>
+          </div>
+
+          <Card className="mb-6">
+            <Title>🏷️ Margem por Produto — Curva ABC</Title>
+            <Text className="text-xs">classe A concentra 80% do faturamento; custo baseado no preço de custo atual</Text>
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-slate-500 border-b border-slate-200">
+                  <tr className="text-left uppercase tracking-wide">
+                    <th className="py-2">Classe</th>
+                    <th>Produto</th>
+                    <th>Categoria</th>
+                    <th className="text-right">Qtd</th>
+                    <th className="text-right">Faturamento</th>
+                    <th className="text-right">Lucro</th>
+                    <th className="text-right">Margem</th>
+                    <th className="text-right">% Acum.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {perf.products.map((p) => (
+                    <tr key={p.productId || p.name}>
+                      <td className="py-2">
+                        <span className={`inline-block w-6 h-6 rounded-full text-center text-xs font-bold leading-6 ${
+                          p.abcClass === 'A' ? 'bg-emerald-100 text-emerald-700'
+                          : p.abcClass === 'B' ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-500'}`}>
+                          {p.abcClass}
+                        </span>
+                      </td>
+                      <td className="text-slate-700 font-medium">{p.name}</td>
+                      <td className="text-slate-500">{p.category}</td>
+                      <td className="text-right text-slate-600">{p.quantity}</td>
+                      <td className="text-right font-semibold text-slate-800">{brl(p.revenue)}</td>
+                      <td className={`text-right font-semibold ${p.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{brl(p.profit)}</td>
+                      <td className="text-right text-slate-600">{p.marginPercent.toFixed(1)}%</td>
+                      <td className="text-right text-slate-400">{p.cumulativePercent.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
 
       <Card>
         <Title>📋 Histórico diário</Title>

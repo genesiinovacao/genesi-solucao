@@ -18,3 +18,29 @@ public record DailyRevenueDto(DateOnly Date, decimal Total, int SalesCount, deci
 public record TopProductDto(string Name, decimal Quantity, decimal Revenue);
 public record TopCustomerDto(Guid? Id, string Name, decimal TotalSpent, int Purchases);
 public record CategoryPerformanceDto(string Category, decimal Revenue, decimal Percent);
+
+public record ProductPerformanceDto(
+    int PeriodDays,
+    DateOnly From,
+    DateOnly To,
+    decimal TotalRevenue,
+    decimal TotalCost,
+    decimal TotalProfit,
+    decimal MarginPercent,
+    int ClassACount,
+    int ClassBCount,
+    int ClassCCount,
+    IReadOnlyList<ProductPerformanceItemDto> Products);
+
+public record ProductPerformanceItemDto(
+    Guid? ProductId,
+    string Name,
+    string Category,
+    decimal Quantity,
+    decimal Revenue,
+    decimal Cost,
+    decimal Profit,
+    decimal MarginPercent,
+    decimal RevenueSharePercent,
+    decimal CumulativePercent,
+    string AbcClass);
