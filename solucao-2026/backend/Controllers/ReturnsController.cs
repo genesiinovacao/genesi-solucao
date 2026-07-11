@@ -97,6 +97,9 @@ public class ReturnsController : ControllerBase
 
         var saleReturn = new SaleReturn
         {
+            // Gerado no cliente para poder referenciar nos stock_movements
+            // antes do SaveChanges (o default do banco só preenche após o INSERT)
+            Id = Guid.NewGuid(),
             TenantId = tenantId,
             SaleId = sale.Id,
             CustomerId = sale.CustomerId,

@@ -27,6 +27,25 @@ async function postJson(url, jwt, body) {
   });
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Retry com backoff exponencial para blips de rede (o renderer também
+// reagenda a cada 30s, então aqui só absorvemos falhas transitórias).
+async function postJsonWithRetry(url, jwt, body, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await postJson(url, jwt, body);
+    } catch (err) {
+      lastErr = err;
+      // 401/403: token inválido — repetir não resolve, devolve na hora
+      if (/^HTTP 40[13]/.test(err.message)) throw err;
+      if (i < attempts - 1) await sleep(1000 * 2 ** i);
+    }
+  }
+  throw lastErr;
+}
+
 async function runSync(apiBase, jwt) {
   const db = getDb();
   const pending = db.prepare('SELECT offline_sync_id, payload_json FROM local_sales WHERE synced = 0 ORDER BY id').all();
@@ -63,9 +82,9 @@ async function runSync(apiBase, jwt) {
   const url = `${apiBase.replace(/\/$/, '')}/api/sync/sales`;
   let results;
   try {
-    results = await postJson(url, jwt, batch);
+    results = await postJsonWithRetry(url, jwt, batch);
   } catch (err) {
-    return { ok: false, sent: batch.length, succeeded: 0, error: err.message };
+    return { ok: false, sent: batch.length, succeeded: 0, pending: batch.length, error: err.message };
   }
 
   const succeeded = results.filter((r) => r.status === 'Success' || r.status === 'AlreadySynced').map((r) => r.offlineSyncId);
@@ -74,7 +93,7 @@ async function runSync(apiBase, jwt) {
   const tx = db.transaction(() => { for (const id of succeeded) upd.run(id); });
   tx();
 
-  return { ok: true, sent: batch.length, succeeded: succeeded.length, results };
+  return { ok: true, sent: batch.length, succeeded: succeeded.length, pending: batch.length - succeeded.length, results };
 }
 
 function registerSyncIpc() {

@@ -30,6 +30,7 @@ export default function PDV() {
   // ===== System state =====
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState('idle');
+  const [syncError, setSyncError] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [toast, setToast] = useState(null);
 
@@ -105,7 +106,11 @@ export default function PDV() {
     try {
       const r = await window.pdv.syncNow(API_BASE, auth.getAccessToken());
       setSyncStatus(r?.ok ? 'ok' : 'error');
-    } catch { setSyncStatus('error'); }
+      setSyncError(r?.ok ? null : r?.error || 'Falha na sincronização');
+    } catch (err) {
+      setSyncStatus('error');
+      setSyncError(err?.message || 'Falha na sincronização');
+    }
     const pending = await window.pdv.getPendingSales();
     setPendingCount(pending.length);
   };
@@ -304,6 +309,12 @@ export default function PDV() {
               </span>
             )}
             {syncStatus === 'syncing' && <span className="text-slate-400 text-xs">Sincronizando…</span>}
+            {syncStatus === 'error' && (
+              <button onClick={doSync} title={syncError || 'Erro ao sincronizar'}
+                      className="px-3 py-1.5 rounded-full bg-rose-900/40 text-rose-300 text-xs hover:bg-rose-900/60">
+                ⚠️ Sync falhou · Tentar agora
+              </button>
+            )}
             <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
                     className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
             <span className="text-slate-300">👤 {user?.name}</span>

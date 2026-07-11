@@ -46,6 +46,22 @@ public class SyncController : ControllerBase
 
         var existingSet = existingIds.ToHashSet();
 
+        // Carrega de uma vez os produtos vendidos para dar baixa de estoque
+        var productIds = salesToSync
+            .Where(s => !existingSet.Contains(s.OfflineSyncId))
+            .SelectMany(s => s.Items)
+            .Where(i => i.ProductId.HasValue)
+            .Select(i => i.ProductId!.Value)
+            .Distinct()
+            .ToList();
+
+        var products = await _db.Products
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        // Transação para manter venda + estoque + movimentações atômicos
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         foreach (var dto in salesToSync)
         {
             if (existingSet.Contains(dto.OfflineSyncId))
@@ -58,6 +74,9 @@ public class SyncController : ControllerBase
             {
                 var sale = new Sale
                 {
+                    // Gerado no cliente para poder referenciar nos stock_movements
+                    // antes do SaveChanges (o default do banco só preenche após o INSERT)
+                    Id = Guid.NewGuid(),
                     TenantId = tenantId,
                     UserId = _tenant.UserId,
                     CustomerId = dto.CustomerId,
@@ -92,6 +111,32 @@ public class SyncController : ControllerBase
                 };
 
                 _db.Sales.Add(sale);
+
+                // Baixa de estoque + movimentação (pode ficar negativo: vendas
+                // offline podem ultrapassar o saldo conhecido pelo servidor)
+                foreach (var item in dto.Items)
+                {
+                    if (item.ProductId is not { } pid || !products.TryGetValue(pid, out var product))
+                        continue;
+
+                    product.StockQuantity -= item.Quantity;
+
+                    _db.StockMovements.Add(new StockMovement
+                    {
+                        TenantId = tenantId,
+                        ProductId = pid,
+                        UserId = _tenant.UserId,
+                        MovementType = "sale",
+                        Quantity = -item.Quantity,
+                        BalanceAfter = product.StockQuantity,
+                        UnitCost = product.CostPrice,
+                        ReferenceType = "sale",
+                        ReferenceId = sale.Id,
+                        Notes = $"Venda sincronizada do PDV ({dto.PosTerminalId ?? "?"})",
+                        CreatedAt = DateTime.UtcNow,
+                    });
+                }
+
                 results.Add(new SyncResult(dto.OfflineSyncId, "Success", null));
             }
             catch (Exception ex)
@@ -102,6 +147,7 @@ public class SyncController : ControllerBase
         }
 
         await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return Ok(results);
     }
 }
