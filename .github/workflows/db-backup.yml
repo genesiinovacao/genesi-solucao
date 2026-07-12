@@ -1,0 +1,59 @@
+# ============================================================================
+# Backup diário do banco de produção (Neon) — artifact privado do GitHub
+#
+# Requer o secret NEON_DATABASE_URL (Settings → Secrets and variables →
+# Actions) com a connection string DIRETA do owner, ex.:
+#   postgresql://neondb_owner:<senha>@ep-xxxx.sa-east-1.aws.neon.tech/solucao?sslmode=require
+#
+# O owner tem BYPASSRLS — necessário para o dump conter TODOS os tenants
+# (o role da aplicação é barrado pelas policies e não serve para backup).
+#
+# Restauração (banco vazio ou novo):
+#   pg_restore --no-owner --clean --if-exists -d "<connection string>" solucao-AAAA-MM-DD.dump
+# ============================================================================
+name: Backup do banco (Neon)
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC = 03:00 em Brasília, todo dia
+  workflow_dispatch:       # permite rodar manualmente na aba Actions
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Instalar cliente Postgres (PGDG, versão nova o bastante p/ o Neon)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo YES=1 /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+          sudo apt-get install -y -qq postgresql-client-18
+
+      - name: pg_dump
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Secret NEON_DATABASE_URL não configurado."
+            exit 1
+          fi
+          FILE="solucao-$(date -u +%Y-%m-%d).dump"
+          pg_dump "$DATABASE_URL" --format=custom --no-owner --file "$FILE"
+          SIZE=$(stat -c%s "$FILE")
+          echo "Dump gerado: $FILE ($SIZE bytes)"
+          # Dump suspeito de vazio (< 20 KB) = provável erro silencioso
+          if [ "$SIZE" -lt 20000 ]; then
+            echo "::error::Dump muito pequeno ($SIZE bytes) — verifique o banco/credencial."
+            exit 1
+          fi
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Guardar artifact (retenção 30 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_number }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          compression-level: 9
+          if-no-files-found: error

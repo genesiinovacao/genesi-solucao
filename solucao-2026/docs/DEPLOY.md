@@ -112,6 +112,23 @@ dotnet run --project tools/HashGen -- "SuaSenhaForteAqui"
 A função é idempotente — rodar de novo com outro hash troca a senha.
 O superadmin loga no dashboard normal e vê o item "🛠️ Administração".
 
+## Backup automático do banco
+
+Três camadas de proteção:
+
+1. **Neon point-in-time restore** (nativo): desfaz erros das últimas horas
+   pelo painel do Neon (Branches → Restore).
+2. **Dump diário via GitHub Actions** ([.github/workflows/db-backup.yml](../../.github/workflows/db-backup.yml)):
+   roda às 03:00 (Brasília), guarda `solucao-AAAA-MM-DD.dump` como artifact
+   privado do repositório com retenção de 30 dias.
+   - Requer o secret **`NEON_DATABASE_URL`** (Settings → Secrets and variables
+     → Actions) com a connection string **direta do owner** (`neondb_owner`) —
+     é o único role com BYPASSRLS, necessário para o dump conter todos os tenants.
+   - Para baixar: aba Actions → run do dia → Artifacts.
+   - Para restaurar: `pg_restore --no-owner --clean --if-exists -d "<conn>" arquivo.dump`
+3. **SQLite local do PDV**: continuidade operacional offline (não é backup do
+   banco central — cobre só o catálogo e as vendas pendentes daquele caixa).
+
 ## Limitações do free tier (aceitáveis no piloto)
 
 - **Render dorme** após 15 min sem tráfego; acorda em ~30–60s. O dashboard sente
