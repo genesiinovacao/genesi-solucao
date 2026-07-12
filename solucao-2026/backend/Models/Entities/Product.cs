@@ -16,6 +16,7 @@ public class Product
     public decimal SalePrice { get; set; }
     public decimal StockQuantity { get; set; }
     public decimal MinStock { get; set; }
+    public DateOnly? ExpiryDate { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

@@ -15,6 +15,7 @@ public record ProductDto(
     decimal SalePrice,
     decimal StockQuantity,
     decimal MinStock,
+    DateOnly? ExpiryDate,
     bool IsActive,
     Guid? SupplierId,
     DateTime UpdatedAt
@@ -32,6 +33,7 @@ public record CreateProductRequest(
     [Range(0, 9999999.99)] decimal SalePrice,
     decimal StockQuantity,
     decimal MinStock,
+    DateOnly? ExpiryDate,
     Guid? SupplierId
 );
 
@@ -46,6 +48,7 @@ public record UpdateProductRequest(
     [Range(0, 9999999.99)] decimal CostPrice,
     [Range(0, 9999999.99)] decimal SalePrice,
     decimal MinStock,
+    DateOnly? ExpiryDate,
     Guid? SupplierId,
     bool IsActive
 );

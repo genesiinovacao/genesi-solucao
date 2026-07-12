@@ -26,6 +26,8 @@ public class AppDbContext : DbContext
     public DbSet<CashMovement> CashMovements => Set<CashMovement>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
+    public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
+    public DbSet<PlatformSettings> PlatformSettings => Set<PlatformSettings>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -230,6 +232,24 @@ public class AppDbContext : DbContext
             e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             e.Property(x => x.Metadata).HasColumnType("jsonb");
+        });
+
+        b.Entity<PosTerminal>(e =>
+        {
+            e.ToTable("pos_terminals");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.Property(x => x.LastSeenAt).HasDefaultValueSql("now()");
+            e.HasIndex(x => new { x.TenantId, x.TerminalKey }).IsUnique();
+        });
+
+        b.Entity<PlatformSettings>(e =>
+        {
+            e.ToTable("platform_settings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
         });
 
         b.Entity<FiscalDocument>(e =>

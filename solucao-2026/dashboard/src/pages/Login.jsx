@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 
@@ -25,7 +25,7 @@ export default function Login() {
         refreshToken: data.refreshToken,
         user: data.user,
       });
-      navigate('/products', { replace: true });
+      navigate(data.user?.role === 'superadmin' ? '/admin' : '/products', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Falha ao entrar. Verifique o backend.');
     } finally {
@@ -88,11 +88,6 @@ export default function Login() {
             {loading ? 'Entrando…' : '🚀 Entrar'}
           </button>
         </form>
-
-        <p className="text-sm text-slate-500 text-center mt-6">
-          Ainda não tem conta?{' '}
-          <Link to="/register" className="text-blue-600 hover:underline font-medium">Cadastre seu mercado</Link>
-        </p>
 
         <div className="mt-8 pt-6 border-t border-slate-200">
           <p className="text-xs text-slate-500 text-center mb-3 font-semibold">

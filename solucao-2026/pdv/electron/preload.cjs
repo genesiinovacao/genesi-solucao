@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('pdv', {
   // ---- Sync ----
   syncNow: (apiBase, jwt) => ipcRenderer.invoke('sync:run', { apiBase, jwt }),
 
+  // ---- Identidade do terminal (limite de PDVs por cliente) ----
+  getTerminalInfo: () => ipcRenderer.invoke('sys:terminal-info'),
+
   // ---- Reset (clears local snapshot — useful when switching tenant) ----
   reset: () => ipcRenderer.invoke('db:reset'),
 

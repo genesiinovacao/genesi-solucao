@@ -3,12 +3,35 @@ import { api } from '../lib/api';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
-const EMPTY_FORM = {
-  name: '', category: '', sku: '', barcode: '', unit: 'un', emoji: '📦',
-  costPrice: '', salePrice: '', stockQuantity: '', minStock: '',
+// Sugestões de categoria por tipo de comércio (o campo continua livre)
+const SEGMENT_CATEGORIES = {
+  supermercado: ['Mercearia', 'Hortifruti', 'Açougue', 'Padaria', 'Frios e Laticínios', 'Bebidas', 'Limpeza', 'Higiene', 'Congelados', 'Pet'],
+  farmacia: ['Medicamentos', 'Genéricos', 'Dermocosméticos', 'Higiene Pessoal', 'Vitaminas', 'Infantil', 'Ortopédicos', 'Conveniência'],
+  loja_roupas: ['Feminino', 'Masculino', 'Infantil', 'Calçados', 'Acessórios', 'Íntimo', 'Esportivo', 'Cama Mesa e Banho'],
+  loja_pecas: ['Motor', 'Suspensão', 'Freios', 'Elétrica', 'Filtros', 'Óleos e Fluidos', 'Acessórios', 'Ferramentas'],
+  padaria: ['Pães', 'Doces e Bolos', 'Salgados', 'Frios', 'Bebidas', 'Mercearia'],
+  conveniencia: ['Bebidas', 'Snacks', 'Cigarros', 'Higiene', 'Congelados', 'Sorvetes'],
+  petshop: ['Rações', 'Petiscos', 'Higiene e Banho', 'Medicamentos', 'Brinquedos', 'Acessórios', 'Aquarismo'],
+  papelaria: ['Escolar', 'Escritório', 'Informática', 'Artesanato', 'Presentes', 'Impressão'],
+  outro: [],
 };
 
-function ProductFormModal({ product, onClose, onSaved }) {
+const daysToExpiry = (iso) => Math.ceil((new Date(iso) - new Date()) / 86400000);
+
+const expiryBadge = (p) => {
+  if (!p.expiryDate) return null;
+  const d = daysToExpiry(p.expiryDate);
+  if (d < 0)   return <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">Vencido</span>;
+  if (d <= 30) return <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Vence em {d}d</span>;
+  return null;
+};
+
+const EMPTY_FORM = {
+  name: '', category: '', sku: '', barcode: '', unit: 'un', emoji: '📦',
+  costPrice: '', salePrice: '', stockQuantity: '', minStock: '', expiryDate: '',
+};
+
+function ProductFormModal({ product, segment, onClose, onSaved }) {
   const isEdit = !!product?.id;
   const [form, setForm] = useState(isEdit ? {
     name: product.name || '',
@@ -21,6 +44,7 @@ function ProductFormModal({ product, onClose, onSaved }) {
     salePrice: product.salePrice,
     stockQuantity: product.stockQuantity,
     minStock: product.minStock,
+    expiryDate: product.expiryDate || '',
   } : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +65,7 @@ function ProductFormModal({ product, onClose, onSaved }) {
       costPrice: Number(form.costPrice) || 0,
       salePrice: Number(form.salePrice) || 0,
       minStock: Number(form.minStock) || 0,
+      expiryDate: form.expiryDate || null,
       supplierId: product?.supplierId || null,
     };
     try {
@@ -83,9 +108,12 @@ function ProductFormModal({ product, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
-              <input type="text" value={form.category} onChange={set('category')}
+              <input type="text" value={form.category} onChange={set('category')} list="category-suggestions"
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                     placeholder="Mercearia" />
+                     placeholder={(SEGMENT_CATEGORIES[segment] || [])[0] || 'Categoria'} />
+              <datalist id="category-suggestions">
+                {(SEGMENT_CATEGORIES[segment] || []).map((c) => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Unidade</label>
@@ -134,6 +162,12 @@ function ProductFormModal({ product, onClose, onSaved }) {
               <input type="number" step="0.001" min="0" value={form.minStock} onChange={set('minStock')}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="10" />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Validade (opcional)</label>
+              <input type="date" value={form.expiryDate} onChange={set('expiryDate')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <p className="text-[11px] text-slate-400 mt-0.5">Para perecíveis/medicamentos — gera aviso na listagem</p>
+            </div>
           </div>
 
           {isEdit && (
@@ -169,6 +203,11 @@ export default function Products() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null); // null | 'new' | produto
+  const [segment, setSegment] = useState('outro');
+
+  useEffect(() => {
+    api.get('/api/settings').then(({ data }) => setSegment(data.segment || 'outro')).catch(() => {});
+  }, []);
 
   const deactivate = async (p) => {
     if (!window.confirm(`Desativar "${p.name}"?\n\nEle some da lista e do PDV, mas o histórico de vendas é preservado.`)) return;
@@ -301,7 +340,7 @@ export default function Products() {
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{p.emoji}</span>
                       <div>
-                        <div className="font-medium text-slate-800">{p.name}</div>
+                        <div className="font-medium text-slate-800">{p.name}{expiryBadge(p)}</div>
                         <div className="text-xs text-slate-400 font-mono">{p.sku || p.barcode || '—'}</div>
                       </div>
                     </div>
@@ -351,6 +390,7 @@ export default function Products() {
       {editing && (
         <ProductFormModal
           product={editing === 'new' ? null : editing}
+          segment={segment}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
         />

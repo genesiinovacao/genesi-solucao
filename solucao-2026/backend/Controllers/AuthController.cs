@@ -97,79 +97,8 @@ public class AuthController : ControllerBase
             new UserDto(user.UserId, user.TenantId, user.TenantName, user.Name, user.Email, user.Role)));
     }
 
-    /// <summary>
-    /// Cadastro self-service: cria o mercado (tenant) + usuário admin e já
-    /// devolve os tokens (auto-login). A criação acontece na função
-    /// SECURITY DEFINER app_register_tenant, pois não há contexto de tenant
-    /// para o RLS antes do tenant existir.
-    /// </summary>
-    [HttpPost("register")]
-    [AllowAnonymous]
-    public async Task<ActionResult<LoginResponse>> Register([FromBody] RegisterRequest req, CancellationToken ct)
-    {
-        var cnpjDigits = new string(req.Cnpj.Where(char.IsDigit).ToArray());
-        if (cnpjDigits.Length != 14)
-            return BadRequest(new { error = "CNPJ inválido: informe os 14 dígitos." });
-
-        var passwordHash = BCrypt.Net.BCrypt.HashPassword(req.Password);
-
-        List<RegisterResult> created;
-        try
-        {
-            created = await _db.Database
-                .SqlQuery<RegisterResult>($@"
-                    SELECT tenant_id AS ""TenantId"", user_id AS ""UserId""
-                    FROM app_register_tenant(
-                        {req.TenantName.Trim()}, {cnpjDigits},
-                        {req.UserName.Trim()}, {req.Email.Trim()}, {passwordHash})")
-                .ToListAsync(ct);
-        }
-        catch (Npgsql.PostgresException pe) when (pe.MessageText.Contains("cnpj_taken"))
-        {
-            return Conflict(new { error = "Já existe um mercado cadastrado com esse CNPJ." });
-        }
-        catch (Npgsql.PostgresException pe) when (pe.MessageText.Contains("email_taken"))
-        {
-            return Conflict(new { error = "Esse e-mail já está em uso." });
-        }
-
-        var result = created.Single();
-        _log.LogInformation("Novo tenant cadastrado: {TenantName} ({TenantId})", req.TenantName, result.TenantId);
-
-        // Auto-login: mesmo fluxo de emissão de tokens do /login
-        var (access, expiresAt) = _jwt.GenerateAccessToken(
-            new User
-            {
-                Id = result.UserId,
-                TenantId = result.TenantId,
-                Name = req.UserName.Trim(),
-                Email = req.Email.Trim(),
-                Role = "admin",
-                PasswordHash = ""
-            },
-            req.TenantName.Trim());
-
-        var refreshRaw = _jwt.GenerateRefreshTokenRaw();
-        var refreshDays = _config.GetValue("Jwt:RefreshTokenDays", 14);
-
-        await using (var tx = await _db.Database.BeginTransactionAsync(ct))
-        {
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT set_config('app.current_tenant_id', {result.TenantId.ToString()}, true)", ct);
-
-            await _db.Database.ExecuteSqlInterpolatedAsync($@"
-                INSERT INTO refresh_tokens (user_id, tenant_id, token_hash, expires_at)
-                VALUES ({result.UserId}, {result.TenantId}, {_jwt.HashRefreshToken(refreshRaw)}, {DateTime.UtcNow.AddDays(refreshDays)})", ct);
-
-            await tx.CommitAsync(ct);
-        }
-
-        return Ok(new LoginResponse(
-            access,
-            refreshRaw,
-            expiresAt,
-            new UserDto(result.UserId, result.TenantId, req.TenantName.Trim(), req.UserName.Trim(), req.Email.Trim(), "admin")));
-    }
+    // O cadastro de tenant é exclusivo do painel administrativo:
+    // POST /api/admin/tenants (role superadmin). Não há signup público.
 
     [HttpPost("refresh")]
     [AllowAnonymous]
@@ -261,12 +190,6 @@ public class AuthController : ControllerBase
     }
 
     // Internal projection records (must have parameterless ctor or matching property names)
-    private sealed record RegisterResult
-    {
-        public Guid TenantId { get; init; }
-        public Guid UserId { get; init; }
-    }
-
     private sealed record UserLoginLookup
     {
         public Guid UserId { get; init; }

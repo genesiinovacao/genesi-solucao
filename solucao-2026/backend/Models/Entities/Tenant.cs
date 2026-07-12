@@ -13,6 +13,9 @@ public class Tenant
     public decimal DailySalesTarget { get; set; }
     public string TaxRegime { get; set; } = "simples_nacional";
     public string? LogoEmoji { get; set; }
+    public string? LogoBase64 { get; set; }
+    public string Segment { get; set; } = "supermercado";
+    public int MaxPosTerminals { get; set; } = 1;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

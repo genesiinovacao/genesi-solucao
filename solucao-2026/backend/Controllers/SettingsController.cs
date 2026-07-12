@@ -32,9 +32,12 @@ public class SettingsController : ControllerBase
         var t = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == tenantId, ct);
         if (t is null) return NotFound();
 
+        var globalLogo = await _db.PlatformSettings.AsNoTracking()
+            .Where(s => s.Id == 1).Select(s => s.LogoBase64).FirstOrDefaultAsync(ct);
+
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji));
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo));
     }
 
     [HttpPut]
@@ -56,8 +59,11 @@ public class SettingsController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
 
+        var globalLogo = await _db.PlatformSettings.AsNoTracking()
+            .Where(s => s.Id == 1).Select(s => s.LogoBase64).FirstOrDefaultAsync(ct);
+
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji));
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo));
     }
 }

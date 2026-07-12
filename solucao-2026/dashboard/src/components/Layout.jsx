@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { createStockConnection } from '../lib/stockHub';
 
@@ -8,6 +9,14 @@ export default function Layout() {
   const location = useLocation();
   const user = auth.getUser();
   const [stockAlerts, setStockAlerts] = useState([]);
+  const [branding, setBranding] = useState(null);
+
+  // Logo do cliente (ou a global da plataforma como fallback)
+  useEffect(() => {
+    api.get('/api/settings')
+      .then(({ data }) => setBranding({ logo: data.logoBase64 || data.globalLogoBase64, segment: data.segment }))
+      .catch(() => setBranding(null));
+  }, []);
 
   // Alertas de estoque em tempo real (SignalR)
   useEffect(() => {
@@ -28,6 +37,7 @@ export default function Layout() {
   };
 
   const navItems = [
+    ...(user?.role === 'superadmin' ? [{ to: '/admin', label: 'Administração', icon: '🛠️' }] : []),
     { to: '/dashboard',  label: 'Dashboard',     icon: '📊' },
     { to: '/products',   label: 'Produtos',      icon: '📦' },
     { to: '/customers',  label: 'Clientes',      icon: '👥' },
@@ -45,10 +55,23 @@ export default function Layout() {
     <div className="flex h-screen bg-slate-50">
       <aside className="w-64 bg-slate-900 text-slate-200 flex flex-col">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold">
-            SOLUÇÃO <span className="text-blue-400">2026</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">{user?.tenantName}</p>
+          {branding?.logo ? (
+            <div className="flex items-center gap-3">
+              <img src={branding.logo} alt="logo"
+                   className="w-11 h-11 object-contain rounded-lg bg-white/95 p-1" />
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">{user?.tenantName}</p>
+                <p className="text-[11px] text-slate-400">SOLUÇÃO 2026</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-xl font-bold">
+                SOLUÇÃO <span className="text-blue-400">2026</span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">{user?.tenantName}</p>
+            </>
+          )}
         </div>
 
         <nav className="flex-1 p-4 space-y-1">

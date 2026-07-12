@@ -12,7 +12,10 @@ public record TenantSettingsDto(
     string? Address,
     decimal DailySalesTarget,
     string TaxRegime,
-    string? LogoEmoji);
+    string? LogoEmoji,
+    string? LogoBase64,
+    string Segment,
+    string? GlobalLogoBase64);
 
 public record UpdateTenantSettingsRequest(
     [Required, StringLength(255)] string Name,

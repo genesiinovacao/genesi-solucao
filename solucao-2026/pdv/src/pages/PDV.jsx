@@ -47,19 +47,24 @@ export default function PDV() {
   const [showReturnSale, setShowReturnSale] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [lastSale, setLastSale] = useState(null); // exibe cupom após venda
+  const [logo, setLogo] = useState(null);         // logo do cliente (ou global)
+  const [storeName, setStoreName] = useState(null);
 
   const searchRef = useRef(null);
 
   // ---- Load catalogue from local SQLite ----
   const loadLocal = async () => {
-    const [p, c, pending] = await Promise.all([
+    const [p, c, pending, settings] = await Promise.all([
       window.pdv.getProducts(),
       window.pdv.getCustomers(),
       window.pdv.getPendingSales(),
+      window.pdv.getSettings().catch(() => null),
     ]);
     setProducts(p);
     setCustomers(c);
     setPendingCount(pending.length);
+    setLogo(settings?.logoBase64 || settings?.globalLogoBase64 || null);
+    setStoreName(settings?.name || null);
   };
 
   // ---- Probe backend for current cash session ----
@@ -277,10 +282,14 @@ export default function PDV() {
            }}>
         <header className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-900/50">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 w-10 h-10 rounded-lg flex items-center justify-center text-xl">🛒</div>
+            {logo
+              ? <img src={logo} alt="logo" className="w-10 h-10 object-contain rounded-lg bg-white/95 p-0.5" />
+              : <div className="bg-blue-600 w-10 h-10 rounded-lg flex items-center justify-center text-xl">🛒</div>}
             <div>
-              <h1 className="text-lg font-bold">SOLUÇÃO <span className="text-blue-400">2026</span></h1>
-              <p className="text-xs text-slate-400">{user?.tenantName}</p>
+              <h1 className="text-lg font-bold">
+                {storeName || user?.tenantName || <>SOLUÇÃO <span className="text-blue-400">2026</span></>}
+              </h1>
+              <p className="text-xs text-slate-400">{storeName ? 'SOLUÇÃO 2026 · PDV' : user?.tenantName}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">

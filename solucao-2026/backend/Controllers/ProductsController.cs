@@ -58,7 +58,7 @@ public class ProductsController : ControllerBase
             .Take(pageSize)
             .Select(p => new ProductDto(
                 p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
-                p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.IsActive, p.SupplierId, p.UpdatedAt))
+                p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt))
             .ToListAsync(ct);
 
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
@@ -73,7 +73,7 @@ public class ProductsController : ControllerBase
 
         return Ok(new ProductDto(
             p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
-            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.IsActive, p.SupplierId, p.UpdatedAt));
+            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
     [HttpPost]
@@ -95,6 +95,7 @@ public class ProductsController : ControllerBase
             SalePrice = req.SalePrice,
             StockQuantity = req.StockQuantity,
             MinStock = req.MinStock,
+            ExpiryDate = req.ExpiryDate,
             SupplierId = req.SupplierId
         };
 
@@ -103,7 +104,7 @@ public class ProductsController : ControllerBase
 
         return CreatedAtAction(nameof(Get), new { id = p.Id }, new ProductDto(
             p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
-            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.IsActive, p.SupplierId, p.UpdatedAt));
+            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
     [HttpPut("{id:guid}")]
@@ -122,6 +123,7 @@ public class ProductsController : ControllerBase
         p.CostPrice = req.CostPrice;
         p.SalePrice = req.SalePrice;
         p.MinStock = req.MinStock;
+        p.ExpiryDate = req.ExpiryDate;
         p.SupplierId = req.SupplierId;
         p.IsActive = req.IsActive;
 
@@ -129,7 +131,7 @@ public class ProductsController : ControllerBase
 
         return Ok(new ProductDto(
             p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
-            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.IsActive, p.SupplierId, p.UpdatedAt));
+            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
     [HttpDelete("{id:guid}")]

@@ -31,6 +31,22 @@ export default function Login() {
       const { data } = await api.post('/api/auth/login', { email, password });
       auth.save({ accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
 
+      // Registra esta máquina no limite de PDVs do cliente. 403 = limite cheio.
+      try {
+        const info = await window.pdv.getTerminalInfo();
+        await api.post('/api/pos-terminals/register', {
+          terminalKey: info.terminalKey,
+          name: info.hostname,
+        });
+      } catch (err) {
+        if (err.response?.status === 403) {
+          auth.clear();
+          throw new Error(err.response?.data?.error || 'Limite de PDVs atingido para esta loja.');
+        }
+        // Sem internet/endpoint indisponível: segue — o terminal já pode ter
+        // sido registrado antes e o PDV é offline-first.
+      }
+
       await bootstrap();
 
       // Drain any sales queued offline before this login

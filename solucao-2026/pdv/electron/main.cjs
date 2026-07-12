@@ -1,6 +1,9 @@
 // SOLUÇÃO 2026 — PDV Electron main process
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const { initDb, getDb } = require('./db.cjs');
 const { registerSyncIpc } = require('./sync.cjs');
 const { registerPrintIpc } = require('./print.cjs');
@@ -39,9 +42,26 @@ function createWindow() {
 }
 
 // ============================================================================
+// Identidade do terminal — UUID persistente por instalação. O backend usa a
+// chave para contar quantas máquinas o cliente ativou (limite por tenant).
+// ============================================================================
+function getTerminalInfo() {
+  const file = path.join(app.getPath('userData'), 'terminal.json');
+  try {
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (saved.terminalKey) return { ...saved, hostname: os.hostname() };
+  } catch { /* primeira execução */ }
+  const info = { terminalKey: crypto.randomUUID() };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(info));
+  return { ...info, hostname: os.hostname() };
+}
+
+// ============================================================================
 // IPC handlers — surface a narrow API to the renderer via preload
 // ============================================================================
 function registerDbIpc() {
+  ipcMain.handle('sys:terminal-info', () => getTerminalInfo());
   ipcMain.handle('db:get-products', () => getDb().prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY name').all());
   ipcMain.handle('db:get-customers', () => getDb().prepare('SELECT * FROM customers WHERE status = ? ORDER BY name').all('active'));
 
