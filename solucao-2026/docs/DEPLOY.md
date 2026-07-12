@@ -96,6 +96,22 @@ Notas:
 
 ---
 
+## Superadmin (dono da plataforma)
+
+Não existe signup público: clientes são cadastrados no painel `/admin`, visível
+apenas para o papel `superadmin`. Para criar o seu superadmin:
+
+```powershell
+# 1. Gere o hash BCrypt da senha escolhida
+dotnet run --project tools/HashGen -- "SuaSenhaForteAqui"
+
+# 2. No SQL Editor do Neon (database solucao), rode com o hash copiado:
+#    SELECT app_upsert_superadmin('Seu Nome', 'seu@email.com', '<hash>');
+```
+
+A função é idempotente — rodar de novo com outro hash troca a senha.
+O superadmin loga no dashboard normal e vê o item "🛠️ Administração".
+
 ## Limitações do free tier (aceitáveis no piloto)
 
 - **Render dorme** após 15 min sem tráfego; acorda em ~30–60s. O dashboard sente
