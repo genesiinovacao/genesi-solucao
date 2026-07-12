@@ -3,6 +3,164 @@ import { api } from '../lib/api';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
+const EMPTY_FORM = {
+  name: '', category: '', sku: '', barcode: '', unit: 'un', emoji: '📦',
+  costPrice: '', salePrice: '', stockQuantity: '', minStock: '',
+};
+
+function ProductFormModal({ product, onClose, onSaved }) {
+  const isEdit = !!product?.id;
+  const [form, setForm] = useState(isEdit ? {
+    name: product.name || '',
+    category: product.category || '',
+    sku: product.sku || '',
+    barcode: product.barcode || '',
+    unit: product.unit || 'un',
+    emoji: product.emoji || '📦',
+    costPrice: product.costPrice,
+    salePrice: product.salePrice,
+    stockQuantity: product.stockQuantity,
+    minStock: product.minStock,
+  } : EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    const payload = {
+      name: form.name.trim(),
+      category: form.category.trim() || null,
+      sku: form.sku.trim() || null,
+      barcode: form.barcode.trim() || null,
+      unit: form.unit,
+      emoji: form.emoji || null,
+      costPrice: Number(form.costPrice) || 0,
+      salePrice: Number(form.salePrice) || 0,
+      minStock: Number(form.minStock) || 0,
+      supplierId: product?.supplierId || null,
+    };
+    try {
+      if (isEdit) {
+        await api.put(`/api/products/${product.id}`, { ...payload, isActive: true });
+      } else {
+        await api.post('/api/products', { ...payload, stockQuantity: Number(form.stockQuantity) || 0 });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.title || err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-auto">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">
+            {isEdit ? '✏️ Editar Produto' : '📦 Novo Produto'}
+          </h2>
+        </header>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-[70px_1fr] gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Emoji</label>
+              <input type="text" value={form.emoji} onChange={set('emoji')} maxLength={4}
+                     className="w-full px-2 py-2 border border-slate-300 rounded-lg text-center text-xl" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Nome *</label>
+              <input type="text" required value={form.name} onChange={set('name')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                     placeholder="Arroz Branco 5kg" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
+              <input type="text" value={form.category} onChange={set('category')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                     placeholder="Mercearia" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Unidade</label>
+              <select value={form.unit} onChange={set('unit')}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                <option value="un">Unidade (un)</option>
+                <option value="kg">Quilo (kg)</option>
+                <option value="g">Grama (g)</option>
+                <option value="l">Litro (l)</option>
+                <option value="ml">Mililitro (ml)</option>
+                <option value="cx">Caixa (cx)</option>
+                <option value="pct">Pacote (pct)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Código de barras</label>
+              <input type="text" value={form.barcode} onChange={set('barcode')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                     placeholder="7891234567890" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">SKU (código interno)</label>
+              <input type="text" value={form.sku} onChange={set('sku')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                     placeholder="ARZ-5KG" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de custo (R$)</label>
+              <input type="number" step="0.01" min="0" value={form.costPrice} onChange={set('costPrice')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="18.00" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de venda (R$) *</label>
+              <input type="number" step="0.01" min="0.01" required value={form.salePrice} onChange={set('salePrice')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="25.00" />
+            </div>
+            {!isEdit && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque inicial</label>
+                <input type="number" step="0.001" min="0" value={form.stockQuantity} onChange={set('stockQuantity')}
+                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="100" />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque mínimo (alerta)</label>
+              <input type="number" step="0.001" min="0" value={form.minStock} onChange={set('minStock')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="10" />
+            </div>
+          </div>
+
+          {isEdit && (
+            <p className="text-xs text-slate-400">
+              O estoque atual ({product.stockQuantity} {product.unit}) não é editável aqui — ele muda
+              pelas vendas do PDV e devoluções, mantendo o histórico de movimentações.
+            </p>
+          )}
+
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+                    className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+              {saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar produto')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Products() {
   const [data, setData] = useState({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 1 });
   const [loading, setLoading] = useState(false);
@@ -10,6 +168,17 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState(null); // null | 'new' | produto
+
+  const deactivate = async (p) => {
+    if (!window.confirm(`Desativar "${p.name}"?\n\nEle some da lista e do PDV, mas o histórico de vendas é preservado.`)) return;
+    try {
+      await api.delete(`/api/products/${p.id}`);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -51,11 +220,17 @@ export default function Products() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">📦 Produtos</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Os dados abaixo vêm da API real (RLS isola por tenant automaticamente).
-        </p>
+      <header className="mb-6 flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">📦 Produtos</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Cadastre aqui — o PDV baixa o catálogo automaticamente no próximo login/sync.
+          </p>
+        </div>
+        <button onClick={() => setEditing('new')}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold">
+          ＋ Novo Produto
+        </button>
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
@@ -105,14 +280,20 @@ export default function Products() {
                 <th className="px-4 py-3 text-right">Preço Venda</th>
                 <th className="px-4 py-3 text-right">Estoque</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>
               )}
               {!loading && data.items.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">Nenhum produto encontrado.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                  Nenhum produto ainda.<br/>
+                  <button onClick={() => setEditing('new')} className="text-blue-600 hover:underline text-sm mt-1">
+                    Cadastrar o primeiro produto
+                  </button>
+                </td></tr>
               )}
               {!loading && data.items.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
@@ -132,6 +313,10 @@ export default function Products() {
                     {p.stockQuantity} <span className="text-xs text-slate-400">{p.unit}</span>
                   </td>
                   <td className="px-4 py-3">{stockBadge(p)}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button onClick={() => setEditing(p)} className="text-blue-600 hover:underline text-sm mr-3">Editar</button>
+                    <button onClick={() => deactivate(p)} className="text-red-500 hover:underline text-sm">Desativar</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -162,6 +347,14 @@ export default function Products() {
           </div>
         )}
       </div>
+
+      {editing && (
+        <ProductFormModal
+          product={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
     </div>
   );
 }
