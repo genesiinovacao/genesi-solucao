@@ -11,6 +11,7 @@ public record AdminTenantDto(
     bool IsActive,
     int MaxPosTerminals,
     string? LogoBase64,
+    DateOnly? SubscriptionExpiresAt,
     DateTime CreatedAt);
 
 public record CreateTenantRequest(
@@ -19,6 +20,7 @@ public record CreateTenantRequest(
     [Required] string Segment,
     string? LogoBase64,
     [Range(0, 100)] int MaxPosTerminals,
+    DateOnly? SubscriptionExpiresAt,
     [Required, MinLength(2), MaxLength(255)] string UserName,
     [Required, EmailAddress] string Email,
     [Required, MinLength(6)] string Password);
@@ -28,8 +30,11 @@ public record UpdateTenantRequest(
     [Required] string Segment,
     string? LogoBase64,
     [Range(0, 100)] int MaxPosTerminals,
+    DateOnly? SubscriptionExpiresAt,
     bool IsActive,
     string PlanType);
+
+public record RenewSubscriptionRequest(DateOnly ExpiresAt);
 
 public record PlatformLogoDto(string? LogoBase64);
 

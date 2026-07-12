@@ -16,6 +16,85 @@ export const SEGMENTS = [
 
 export const segmentLabel = (v) => SEGMENTS.find((s) => s.value === v)?.label || v;
 
+const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
+const daysLeft = (iso) => Math.ceil((new Date(`${iso}T23:59:59`) - new Date()) / 86400000);
+
+function SubscriptionBadge({ expiresAt }) {
+  if (!expiresAt) return <span className="text-slate-400 text-xs">— sem controle</span>;
+  const d = daysLeft(expiresAt);
+  if (d < 0)
+    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">⛔ Expirada em {fmtDate(expiresAt)}</span>;
+  if (d <= 3)
+    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">⚠️ Expira em {d === 0 ? 'hoje' : `${d} dia(s)`} ({fmtDate(expiresAt)})</span>;
+  return <span className="text-slate-600 text-xs">{fmtDate(expiresAt)}</span>;
+}
+
+function RenewModal({ tenant, onClose, onSaved }) {
+  const base = tenant.subscriptionExpiresAt && daysLeft(tenant.subscriptionExpiresAt) > 0
+    ? new Date(`${tenant.subscriptionExpiresAt}T12:00:00`)
+    : new Date();
+  const suggested = new Date(base);
+  suggested.setMonth(suggested.getMonth() + 1);
+
+  const [date, setDate] = useState(suggested.toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const addMonths = (n) => {
+    const d = new Date(base);
+    d.setMonth(d.getMonth() + n);
+    setDate(d.toISOString().slice(0, 10));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      await api.post(`/api/admin/tenants/${tenant.id}/renew`, { expiresAt: date });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">🔄 Renovar assinatura</h2>
+          <p className="text-xs text-slate-500 mt-1">{tenant.name}</p>
+        </header>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="text-sm text-slate-600">
+            Validade atual:{' '}
+            <strong>{tenant.subscriptionExpiresAt ? fmtDate(tenant.subscriptionExpiresAt) : 'sem controle'}</strong>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Nova data de expiração</label>
+            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)}
+                   min={new Date().toISOString().slice(0, 10)}
+                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+          <div className="flex gap-2 text-xs">
+            <button type="button" onClick={() => addMonths(1)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+1 mês</button>
+            <button type="button" onClick={() => addMonths(3)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+3 meses</button>
+            <button type="button" onClick={() => addMonths(12)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+1 ano</button>
+          </div>
+          {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+              {saving ? 'Renovando…' : 'Confirmar renovação'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Converte o arquivo escolhido em data-URL base64, recusando imagens grandes
 function readLogoFile(file, cb, onError) {
   if (file.size > 200 * 1024) {
@@ -54,14 +133,21 @@ function LogoPicker({ value, onChange, label }) {
 
 function TenantFormModal({ tenant, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
+  const defaultExpiry = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  };
   const [form, setForm] = useState(isEdit ? {
     name: tenant.name, cnpj: tenant.cnpj, segment: tenant.segment,
     logoBase64: tenant.logoBase64, maxPosTerminals: tenant.maxPosTerminals,
+    subscriptionExpiresAt: tenant.subscriptionExpiresAt || '',
     isActive: tenant.isActive, planType: tenant.planType,
     userName: '', email: '', password: '',
   } : {
     name: '', cnpj: '', segment: 'supermercado', logoBase64: null,
-    maxPosTerminals: 1, isActive: true, planType: 'standard',
+    maxPosTerminals: 1, subscriptionExpiresAt: defaultExpiry(),
+    isActive: true, planType: 'standard',
     userName: '', email: '', password: '',
   });
   const [saving, setSaving] = useState(false);
@@ -80,12 +166,15 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
       if (isEdit) {
         await api.put(`/api/admin/tenants/${tenant.id}`, {
           name: form.name, segment: form.segment, logoBase64: form.logoBase64,
-          maxPosTerminals: Number(form.maxPosTerminals), isActive: form.isActive, planType: form.planType,
+          maxPosTerminals: Number(form.maxPosTerminals),
+          subscriptionExpiresAt: form.subscriptionExpiresAt || null,
+          isActive: form.isActive, planType: form.planType,
         });
       } else {
         await api.post('/api/admin/tenants', {
           tenantName: form.name, cnpj: form.cnpj, segment: form.segment,
           logoBase64: form.logoBase64, maxPosTerminals: Number(form.maxPosTerminals),
+          subscriptionExpiresAt: form.subscriptionExpiresAt || null,
           userName: form.userName, email: form.email, password: form.password,
         });
       }
@@ -137,6 +226,12 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
                 <option value="premium">Premium</option>
                 <option value="enterprise">Enterprise</option>
               </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Assinatura válida até</label>
+              <input type="date" value={form.subscriptionExpiresAt} onChange={set('subscriptionExpiresAt')}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <p className="text-[11px] text-slate-400 mt-0.5">Vazio = sem controle de expiração. Alertas começam 3 dias antes.</p>
             </div>
           </div>
 
@@ -196,6 +291,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // null | 'new' | tenant
+  const [renewing, setRenewing] = useState(null); // tenant sendo renovado
   const [globalLogo, setGlobalLogo] = useState(null);
   const [logoSaving, setLogoSaving] = useState(false);
 
@@ -269,14 +365,15 @@ export default function Admin() {
               <th className="px-4 py-3">Segmento</th>
               <th className="px-4 py-3">Plano</th>
               <th className="px-4 py-3 text-right">PDVs</th>
+              <th className="px-4 py-3">Assinatura</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>}
+            {loading && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>}
             {!loading && tenants.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-500">Nenhum cliente cadastrado ainda.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-16 text-center text-slate-500">Nenhum cliente cadastrado ainda.</td></tr>
             )}
             {!loading && tenants.map((t) => (
               <tr key={t.id} className="hover:bg-slate-50">
@@ -292,6 +389,7 @@ export default function Admin() {
                 <td className="px-4 py-3 text-slate-600">{segmentLabel(t.segment)}</td>
                 <td className="px-4 py-3 text-slate-600 capitalize">{t.planType}</td>
                 <td className="px-4 py-3 text-right text-slate-700 font-semibold">{t.maxPosTerminals}</td>
+                <td className="px-4 py-3"><SubscriptionBadge expiresAt={t.subscriptionExpiresAt} /></td>
                 <td className="px-4 py-3">
                   {t.isActive
                     ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Ativo</span>
@@ -302,6 +400,8 @@ export default function Admin() {
                     <button onClick={() => impersonate(t)} title="Entrar no painel deste cliente como suporte"
                             className="text-emerald-600 hover:underline text-sm mr-3">Acessar</button>
                   )}
+                  <button onClick={() => setRenewing(t)} title="Renovar assinatura"
+                          className="text-indigo-600 hover:underline text-sm mr-3">Renovar</button>
                   <button onClick={() => setEditing(t)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 </td>
               </tr>
@@ -315,6 +415,14 @@ export default function Admin() {
           tenant={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+
+      {renewing && (
+        <RenewModal
+          tenant={renewing}
+          onClose={() => setRenewing(null)}
+          onSaved={() => { setRenewing(null); load(); }}
         />
       )}
     </div>

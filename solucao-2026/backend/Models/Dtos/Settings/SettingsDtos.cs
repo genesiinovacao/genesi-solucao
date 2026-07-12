@@ -15,7 +15,8 @@ public record TenantSettingsDto(
     string? LogoEmoji,
     string? LogoBase64,
     string Segment,
-    string? GlobalLogoBase64);
+    string? GlobalLogoBase64,
+    DateOnly? SubscriptionExpiresAt);
 
 public record UpdateTenantSettingsRequest(
     [Required, StringLength(255)] string Name,

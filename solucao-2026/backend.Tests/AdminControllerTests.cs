@@ -28,7 +28,7 @@ public class AdminControllerTests
     }
 
     private static CreateTenantRequest ValidCreate(string cnpj = "12.345.678/0001-90", string segment = "farmacia") =>
-        new("Farmácia Central", cnpj, segment, null, 2, "Ana Farm", "ana@farmacia.com", "123456");
+        new("Farmácia Central", cnpj, segment, null, 2, null, "Ana Farm", "ana@farmacia.com", "123456");
 
     [Theory]
     [InlineData("123")]
@@ -66,7 +66,7 @@ public class AdminControllerTests
         db.SaveChanges();
 
         var response = await controller.UpdateTenant(tenant.Id,
-            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, false, "premium"), default);
+            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, null, false, "premium"), default);
 
         var dto = Assert.IsType<AdminTenantDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
         Assert.Equal("Loja X Renomeada", dto.Name);
@@ -86,6 +86,35 @@ public class AdminControllerTests
         var get = await controller.GetPlatformLogo(default);
         var dto = Assert.IsType<PlatformLogoDto>(Assert.IsType<OkObjectResult>(get.Result).Value);
         Assert.StartsWith("data:image/png", dto.LogoBase64);
+    }
+
+    [Fact]
+    public async Task RenewSubscription_UpdatesExpiryDate()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Loja", Cnpj = "11222333000144" };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var newDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(1));
+        var response = await controller.RenewSubscription(tenant.Id, new RenewSubscriptionRequest(newDate), default);
+
+        var dto = Assert.IsType<AdminTenantDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
+        Assert.Equal(newDate, dto.SubscriptionExpiresAt);
+    }
+
+    [Fact]
+    public async Task RenewSubscription_RejectsPastDate()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Loja", Cnpj = "11222333000144" };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.RenewSubscription(tenant.Id,
+            new RenewSubscriptionRequest(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1))), default);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
     }
 
     [Fact]

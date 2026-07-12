@@ -11,16 +11,23 @@ export default function Layout() {
   const [stockAlerts, setStockAlerts] = useState([]);
   const [branding, setBranding] = useState(null);
 
-  // Logos: a do cliente (topo da sidebar) e a global do sistema (rodapé)
+  // Logos + validade da assinatura (para o lembrete de pagamento)
   useEffect(() => {
     api.get('/api/settings')
       .then(({ data }) => setBranding({
         clientLogo: data.logoBase64,
         globalLogo: data.globalLogoBase64,
         segment: data.segment,
+        subscriptionExpiresAt: data.subscriptionExpiresAt,
       }))
       .catch(() => setBranding(null));
   }, []);
+
+  // Dias até expirar a assinatura (null = sem controle / não carregado)
+  const subDaysLeft = branding?.subscriptionExpiresAt
+    ? Math.ceil((new Date(`${branding.subscriptionExpiresAt}T23:59:59`) - new Date()) / 86400000)
+    : null;
+  const showSubscriptionWarning = subDaysLeft !== null && subDaysLeft <= 3;
 
   // Alertas de estoque em tempo real (SignalR)
   useEffect(() => {
@@ -150,6 +157,19 @@ export default function Layout() {
                     className="px-3 py-1 bg-amber-950 text-amber-100 rounded-md text-xs font-semibold hover:bg-amber-900 shrink-0">
               ← Voltar ao painel admin
             </button>
+          </div>
+        )}
+        {!isSuper && showSubscriptionWarning && (
+          <div className={`px-4 py-2 text-sm font-medium shrink-0 ${
+            subDaysLeft < 0 ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900 border-b border-amber-300'}`}>
+            {subDaysLeft < 0 ? (
+              <>⛔ Sua assinatura <strong>venceu</strong> em {new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}.
+                Regularize o pagamento com a equipe SOLUÇÃO para garantir a continuidade do sistema.</>
+            ) : (
+              <>⚠️ Sua assinatura vence {subDaysLeft === 0 ? 'hoje' : subDaysLeft === 1 ? 'amanhã' : `em ${subDaysLeft} dias`}
+                {' '}({new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}).
+                Lembre-se de efetuar o pagamento para continuar usando o sistema.</>
+            )}
           </div>
         )}
         <div className="flex-1 overflow-auto">

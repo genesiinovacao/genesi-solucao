@@ -46,7 +46,7 @@ public class AdminController : ControllerBase
 
         return Ok(tenants.Select(t => new AdminTenantDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.CreatedAt)).ToList());
+            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt)).ToList());
     }
 
     [HttpPost("tenants")]
@@ -89,6 +89,7 @@ public class AdminController : ControllerBase
         t.Segment = req.Segment;
         t.LogoBase64 = req.LogoBase64;
         t.MaxPosTerminals = req.MaxPosTerminals;
+        t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
         await _db.SaveChangesAsync(ct);
 
         _log.LogInformation("Admin criou tenant {Name} ({Id}), segmento {Segment}, {MaxPos} PDV(s)",
@@ -96,7 +97,7 @@ public class AdminController : ControllerBase
 
         return Ok(new AdminTenantDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.CreatedAt));
+            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
     }
 
     [HttpPut("tenants/{id:guid}")]
@@ -114,13 +115,37 @@ public class AdminController : ControllerBase
         t.Segment = req.Segment;
         t.LogoBase64 = req.LogoBase64;
         t.MaxPosTerminals = req.MaxPosTerminals;
+        t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
         t.IsActive = req.IsActive;
         t.PlanType = req.PlanType;
         await _db.SaveChangesAsync(ct);
 
         return Ok(new AdminTenantDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.CreatedAt));
+            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
+    }
+
+    /// <summary>Renova a assinatura definindo a nova data de expiração.</summary>
+    [HttpPost("tenants/{id:guid}/renew")]
+    public async Task<ActionResult<AdminTenantDto>> RenewSubscription(
+        Guid id, [FromBody] RenewSubscriptionRequest req, CancellationToken ct)
+    {
+        if (req.ExpiresAt < DateOnly.FromDateTime(DateTime.UtcNow))
+            return BadRequest(new { error = "A nova data de expiração não pode estar no passado." });
+
+        var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+
+        var previous = t.SubscriptionExpiresAt;
+        t.SubscriptionExpiresAt = req.ExpiresAt;
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Assinatura renovada: {Tenant} de {De} para {Ate}",
+            t.Name, previous?.ToString() ?? "—", req.ExpiresAt);
+
+        return Ok(new AdminTenantDto(
+            t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
+            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
     }
 
     /// <summary>

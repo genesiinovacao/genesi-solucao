@@ -32,6 +32,7 @@ services:
       - ./database/08_fiscal_documents.sql:/docker-entrypoint-initdb.d/08_fiscal_documents.sql:ro
       - ./database/09_tenant_registration.sql:/docker-entrypoint-initdb.d/09_tenant_registration.sql:ro
       - ./database/10_platform_admin.sql:/docker-entrypoint-initdb.d/10_platform_admin.sql:ro
+      - ./database/11_subscription.sql:/docker-entrypoint-initdb.d/11_subscription.sql:ro
       # 03_seed.sql (tenants demo) fica de fora em produção de propósito
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U solucao_admin -d solucao"]

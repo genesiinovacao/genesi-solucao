@@ -16,6 +16,7 @@ public class Tenant
     public string? LogoBase64 { get; set; }
     public string Segment { get; set; } = "supermercado";
     public int MaxPosTerminals { get; set; } = 1;
+    public DateOnly? SubscriptionExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
