@@ -47,7 +47,8 @@ export default function PDV() {
   const [showReturnSale, setShowReturnSale] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [lastSale, setLastSale] = useState(null); // exibe cupom após venda
-  const [logo, setLogo] = useState(null);         // logo do cliente (ou global)
+  const [logo, setLogo] = useState(null);             // logo do cliente
+  const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
   const [storeName, setStoreName] = useState(null);
 
   const searchRef = useRef(null);
@@ -63,7 +64,8 @@ export default function PDV() {
     setProducts(p);
     setCustomers(c);
     setPendingCount(pending.length);
-    setLogo(settings?.logoBase64 || settings?.globalLogoBase64 || null);
+    setLogo(settings?.logoBase64 || null);
+    setGlobalLogo(settings?.globalLogoBase64 || null);
     setStoreName(settings?.name || null);
   };
 
@@ -326,6 +328,10 @@ export default function PDV() {
             )}
             <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
                     className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
+            {globalLogo && (
+              <img src={globalLogo} alt="SOLUÇÃO" title="SOLUÇÃO 2026"
+                   className="h-8 object-contain rounded bg-white/95 p-0.5" />
+            )}
             <span className="text-slate-300">👤 {user?.name}</span>
             <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm">🚪 Sair</button>
           </div>

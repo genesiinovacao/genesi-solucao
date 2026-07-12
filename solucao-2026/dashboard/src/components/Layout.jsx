@@ -11,10 +11,14 @@ export default function Layout() {
   const [stockAlerts, setStockAlerts] = useState([]);
   const [branding, setBranding] = useState(null);
 
-  // Logo do cliente (ou a global da plataforma como fallback)
+  // Logos: a do cliente (topo da sidebar) e a global do sistema (rodapé)
   useEffect(() => {
     api.get('/api/settings')
-      .then(({ data }) => setBranding({ logo: data.logoBase64 || data.globalLogoBase64, segment: data.segment }))
+      .then(({ data }) => setBranding({
+        clientLogo: data.logoBase64,
+        globalLogo: data.globalLogoBase64,
+        segment: data.segment,
+      }))
       .catch(() => setBranding(null));
   }, []);
 
@@ -36,32 +40,44 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const navItems = [
-    ...(user?.role === 'superadmin' ? [{ to: '/admin', label: 'Administração', icon: '🛠️' }] : []),
-    { to: '/dashboard',  label: 'Dashboard',     icon: '📊' },
-    { to: '/products',   label: 'Produtos',      icon: '📦' },
-    { to: '/customers',  label: 'Clientes',      icon: '👥' },
-    { to: '/sales',      label: 'Vendas',        icon: '🧾' },
-    { to: '/suppliers',  label: 'Fornecedores',  icon: '🏭' },
-    { to: '/financial',  label: 'Financeiro',    icon: '💰' },
-    { to: '/promotions', label: 'Promoções',     icon: '🏷️' },
-    { to: '/delivery',   label: 'Delivery',      icon: '🚴' },
-    { to: '/reports',    label: 'Relatórios',    icon: '📈' },
-    { to: '/ai',         label: 'SOLUÇÃO IA',    icon: '🤖' },
-    { to: '/settings',   label: 'Configurações', icon: '⚙️' },
-  ];
+  // Superadmin é gestor da plataforma, não uma loja: só vê a Administração.
+  const isSuper = user?.role === 'superadmin';
+  const navItems = isSuper
+    ? [{ to: '/admin', label: 'Administração', icon: '🛠️' }]
+    : [
+        { to: '/dashboard',  label: 'Dashboard',     icon: '📊' },
+        { to: '/products',   label: 'Produtos',      icon: '📦' },
+        { to: '/customers',  label: 'Clientes',      icon: '👥' },
+        { to: '/sales',      label: 'Vendas',        icon: '🧾' },
+        { to: '/suppliers',  label: 'Fornecedores',  icon: '🏭' },
+        { to: '/financial',  label: 'Financeiro',    icon: '💰' },
+        { to: '/promotions', label: 'Promoções',     icon: '🏷️' },
+        { to: '/delivery',   label: 'Delivery',      icon: '🚴' },
+        { to: '/reports',    label: 'Relatórios',    icon: '📈' },
+        { to: '/ai',         label: 'SOLUÇÃO IA',    icon: '🤖' },
+        { to: '/settings',   label: 'Configurações', icon: '⚙️' },
+      ];
 
   return (
     <div className="flex h-screen bg-slate-50">
       <aside className="w-64 bg-slate-900 text-slate-200 flex flex-col">
         <div className="p-6 border-b border-slate-800">
-          {branding?.logo ? (
+          {isSuper ? (
             <div className="flex items-center gap-3">
-              <img src={branding.logo} alt="logo"
+              {branding?.globalLogo
+                ? <img src={branding.globalLogo} alt="logo" className="w-11 h-11 object-contain rounded-lg bg-white/95 p-1" />
+                : <div className="w-11 h-11 rounded-lg bg-blue-600 flex items-center justify-center text-xl">🛠️</div>}
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">SOLUÇÃO 2026</p>
+                <p className="text-[11px] text-slate-400">Painel da Plataforma</p>
+              </div>
+            </div>
+          ) : branding?.clientLogo ? (
+            <div className="flex items-center gap-3">
+              <img src={branding.clientLogo} alt="logo"
                    className="w-11 h-11 object-contain rounded-lg bg-white/95 p-1" />
               <div className="min-w-0">
                 <p className="text-sm font-bold truncate">{user?.tenantName}</p>
-                <p className="text-[11px] text-slate-400">SOLUÇÃO 2026</p>
               </div>
             </div>
           ) : (
@@ -93,6 +109,13 @@ export default function Layout() {
             );
           })}
         </nav>
+
+        {!isSuper && branding?.globalLogo && (
+          <div className="px-4 pb-3 flex items-center justify-center gap-2">
+            <img src={branding.globalLogo} alt="SOLUÇÃO" className="h-7 object-contain rounded bg-white/95 p-0.5" />
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">SOLUÇÃO 2026</span>
+          </div>
+        )}
 
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center gap-3 px-2 py-2 mb-2">

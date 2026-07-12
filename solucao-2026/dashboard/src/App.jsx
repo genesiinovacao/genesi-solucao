@@ -19,6 +19,11 @@ function RequireAuth({ children }) {
   return auth.isAuthenticated() ? children : <Navigate to="/login" replace />;
 }
 
+// Superadmin gerencia a plataforma; clientes caem no dashboard da loja
+function HomeRedirect() {
+  return <Navigate to={auth.getUser()?.role === 'superadmin' ? '/admin' : '/dashboard'} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -31,7 +36,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<HomeRedirect />} />
         <Route path="dashboard"  element={<Dashboard />} />
         <Route path="products"   element={<Products />} />
         <Route path="customers"  element={<Customers />} />
