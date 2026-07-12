@@ -125,6 +125,34 @@ public class AdminController : ControllerBase
             t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
     }
 
+    /// <summary>
+    /// Exclusão definitiva de um cliente e de TODOS os seus dados (cascade em
+    /// todas as tabelas). Duas travas: o cliente precisa estar bloqueado
+    /// (IsActive = false) e o nome exato deve vir em ?confirm= — a UI pede
+    /// para digitá-lo.
+    /// </summary>
+    [HttpDelete("tenants/{id:guid}")]
+    public async Task<IActionResult> DeleteTenant(Guid id, [FromQuery] string? confirm, CancellationToken ct)
+    {
+        if (id == Guid.Parse("00000000-0000-0000-0000-000000000001"))
+            return BadRequest(new { error = "O tenant da plataforma não pode ser excluído." });
+
+        var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+
+        if (t.IsActive)
+            return BadRequest(new { error = "Bloqueie o cliente antes de excluir (Editar → desmarcar \"Cliente ativo\")." });
+        if (!string.Equals(confirm?.Trim(), t.Name, StringComparison.Ordinal))
+            return BadRequest(new { error = "Confirmação incorreta: digite o nome exato do cliente." });
+
+        _db.Tenants.Remove(t);
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogWarning("TENANT EXCLUÍDO: {Name} ({Id}), CNPJ {Cnpj} — todos os dados removidos em cascata",
+            t.Name, t.Id, t.Cnpj);
+        return NoContent();
+    }
+
     /// <summary>Renova a assinatura definindo a nova data de expiração.</summary>
     [HttpPost("tenants/{id:guid}/renew")]
     public async Task<ActionResult<AdminTenantDto>> RenewSubscription(

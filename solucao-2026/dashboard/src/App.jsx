@@ -12,6 +12,7 @@ import Promotions from './pages/Promotions';
 import Delivery from './pages/Delivery';
 import Reports from './pages/Reports';
 import Ai from './pages/Ai';
+import Team from './pages/Team';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
 
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="delivery"   element={<Delivery />} />
         <Route path="reports"    element={<Reports />} />
         <Route path="ai"         element={<Ai />} />
+        <Route path="team"       element={<Team />} />
         <Route path="settings"   element={<Settings />} />
         <Route path="admin"      element={<Admin />} />
       </Route>

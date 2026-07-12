@@ -68,6 +68,8 @@ export default function Layout() {
         { to: '/delivery',   label: 'Delivery',      icon: '🚴' },
         { to: '/reports',    label: 'Relatórios',    icon: '📈' },
         { to: '/ai',         label: 'SOLUÇÃO IA',    icon: '🤖' },
+        // Gestão de equipe/PDVs é restrita ao admin da loja
+        ...(user?.role === 'admin' ? [{ to: '/team', label: 'Equipe & PDVs', icon: '🧑‍💼' }] : []),
         { to: '/settings',   label: 'Configurações', icon: '⚙️' },
       ];
 

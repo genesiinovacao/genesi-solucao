@@ -148,6 +148,53 @@ public class AdminControllerTests
     }
 
     [Fact]
+    public async Task DeleteTenant_RejectsPlatformTenant()
+    {
+        var (controller, _) = Setup();
+        var response = await controller.DeleteTenant(Guid.Parse("00000000-0000-0000-0000-000000000001"), "Plataforma", default);
+        Assert.IsType<BadRequestObjectResult>(response);
+    }
+
+    [Fact]
+    public async Task DeleteTenant_RejectsActiveTenant()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Ativo", Cnpj = "11222333000144", IsActive = true };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.DeleteTenant(tenant.Id, "Ativo", default);
+        Assert.IsType<BadRequestObjectResult>(response);
+        Assert.NotNull(db.Tenants.Find(tenant.Id));
+    }
+
+    [Fact]
+    public async Task DeleteTenant_RejectsWrongConfirmName()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Loja Certa", Cnpj = "11222333000144", IsActive = false };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.DeleteTenant(tenant.Id, "Loja Errada", default);
+        Assert.IsType<BadRequestObjectResult>(response);
+        Assert.NotNull(db.Tenants.Find(tenant.Id));
+    }
+
+    [Fact]
+    public async Task DeleteTenant_RemovesBlockedTenantWithExactName()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Para Excluir", Cnpj = "11222333000144", IsActive = false };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.DeleteTenant(tenant.Id, "Para Excluir", default);
+        Assert.IsType<NoContentResult>(response);
+        Assert.Null(db.Tenants.Find(tenant.Id));
+    }
+
+    [Fact]
     public async Task ListTenants_HidesPlatformTenant()
     {
         var (controller, db) = Setup();
