@@ -84,6 +84,7 @@ public class CustomersController : ControllerBase
         return Ok(ToDto(c));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<CustomerDto>> Create([FromBody] CreateCustomerRequest req, CancellationToken ct)
     {
@@ -108,6 +109,7 @@ public class CustomersController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = c.Id }, ToDto(c));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<CustomerDto>> Update(Guid id, [FromBody] UpdateCustomerRequest req, CancellationToken ct)
     {
@@ -128,6 +130,7 @@ public class CustomersController : ControllerBase
         return Ok(ToDto(c));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

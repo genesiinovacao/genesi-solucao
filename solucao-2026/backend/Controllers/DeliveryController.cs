@@ -57,6 +57,7 @@ public class DeliveryController : ControllerBase
         return Ok(ToDto(d));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<DeliveryOrderDto>> Create([FromBody] CreateDeliveryRequest req, CancellationToken ct)
     {
@@ -90,6 +91,7 @@ public class DeliveryController : ControllerBase
     }
 
     /// <summary>Move the order across the kanban columns.</summary>
+    [Authorize(Roles = "admin,manager")]
     [HttpPost("{id:guid}/status")]
     public async Task<ActionResult<DeliveryOrderDto>> ChangeStatus(Guid id, [FromBody] UpdateDeliveryStatusRequest req, CancellationToken ct)
     {
@@ -107,6 +109,7 @@ public class DeliveryController : ControllerBase
         return Ok(ToDto(d));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

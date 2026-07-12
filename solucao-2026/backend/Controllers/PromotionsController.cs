@@ -56,6 +56,7 @@ public class PromotionsController : ControllerBase
             (int)Math.Ceiling(total / (double)pageSize)));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<PromotionDto>> Create([FromBody] CreatePromotionRequest req, CancellationToken ct)
     {
@@ -78,6 +79,7 @@ public class PromotionsController : ControllerBase
         return Ok(ToDto(p));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<PromotionDto>> Update(Guid id, [FromBody] UpdatePromotionRequest req, CancellationToken ct)
     {
@@ -97,6 +99,7 @@ public class PromotionsController : ControllerBase
         return Ok(ToDto(p));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost("{id:guid}/toggle")]
     public async Task<ActionResult<PromotionDto>> Toggle(Guid id, CancellationToken ct)
     {
@@ -107,6 +110,7 @@ public class PromotionsController : ControllerBase
         return Ok(ToDto(p));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

@@ -69,6 +69,7 @@ public class SuppliersController : ControllerBase
         return Ok(ToDto(s));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<SupplierDto>> Create([FromBody] CreateSupplierRequest req, CancellationToken ct)
     {
@@ -93,6 +94,7 @@ public class SuppliersController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = s.Id }, ToDto(s));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<SupplierDto>> Update(Guid id, [FromBody] UpdateSupplierRequest req, CancellationToken ct)
     {
@@ -113,6 +115,7 @@ public class SuppliersController : ControllerBase
         return Ok(ToDto(s));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

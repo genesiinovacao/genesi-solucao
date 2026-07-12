@@ -56,6 +56,7 @@ public class FinancialController : ControllerBase
             (int)Math.Ceiling(total / (double)pageSize)));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<FinancialTransactionDto>> Create([FromBody] CreateFinancialTransactionRequest req, CancellationToken ct)
     {
@@ -84,6 +85,7 @@ public class FinancialController : ControllerBase
         return Ok(ToDto(t));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<FinancialTransactionDto>> Update(Guid id, [FromBody] UpdateFinancialTransactionRequest req, CancellationToken ct)
     {
@@ -108,6 +110,7 @@ public class FinancialController : ControllerBase
         return Ok(ToDto(t));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

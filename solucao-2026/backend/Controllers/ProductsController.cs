@@ -76,6 +76,7 @@ public class ProductsController : ControllerBase
             p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req, CancellationToken ct)
     {
@@ -107,6 +108,7 @@ public class ProductsController : ControllerBase
             p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ProductDto>> Update(Guid id, [FromBody] UpdateProductRequest req, CancellationToken ct)
     {
@@ -134,6 +136,7 @@ public class ProductsController : ControllerBase
             p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
+    [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

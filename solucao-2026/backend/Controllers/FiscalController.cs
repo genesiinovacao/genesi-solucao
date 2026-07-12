@@ -99,7 +99,9 @@ public class FiscalController : ControllerBase
         return Ok(ToDto(doc));
     }
 
-    /// <summary>Cancela um documento fiscal autorizado.</summary>
+    /// <summary>Cancela um documento fiscal autorizado. Ato gerencial —
+    /// o caixa emite nota, mas não cancela.</summary>
+    [Authorize(Roles = "admin,manager")]
     [HttpPost("documents/{id:guid}/cancel")]
     public async Task<ActionResult<FiscalDocumentDto>> Cancel(
         Guid id, [FromBody] CancelFiscalRequest req, CancellationToken ct)

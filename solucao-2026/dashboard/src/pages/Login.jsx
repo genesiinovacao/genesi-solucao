@@ -20,6 +20,11 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await api.post('/api/auth/login', { email, password });
+      // Conta de caixa opera só no aplicativo PDV — o dashboard é gerencial
+      if (data.user?.role === 'cashier') {
+        setError('Esta é uma conta de caixa. Use o aplicativo PDV instalado no computador da loja.');
+        return;
+      }
       auth.save({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
