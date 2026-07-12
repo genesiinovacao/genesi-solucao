@@ -5,8 +5,8 @@ import { auth } from '../lib/auth';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@mercadojoao.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -89,25 +89,9 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-200">
-          <p className="text-xs text-slate-500 text-center mb-3 font-semibold">
-            Contas demo (senha: 123456)
-          </p>
-          <div className="space-y-1.5 text-xs">
-            <button
-              onClick={() => { setEmail('admin@mercadojoao.com'); setPassword('123456'); }}
-              className="block w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-md font-mono text-slate-700"
-            >
-              admin@mercadojoao.com → Mercado do João
-            </button>
-            <button
-              onClick={() => { setEmail('admin@padariaana.com'); setPassword('123456'); }}
-              className="block w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-md font-mono text-slate-700"
-            >
-              admin@padariaana.com → Padaria da Ana
-            </button>
-          </div>
-        </div>
+        <p className="text-xs text-slate-400 text-center mt-8">
+          Acesso fornecido pela equipe SOLUÇÃO.
+        </p>
       </div>
     </div>
   );
