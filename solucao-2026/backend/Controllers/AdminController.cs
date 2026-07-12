@@ -24,11 +24,15 @@ public class AdminController : ControllerBase
         { "supermercado", "farmacia", "loja_roupas", "loja_pecas", "padaria", "conveniencia", "petshop", "papelaria", "outro" };
 
     private readonly AppDbContext _db;
+    private readonly IJwtService _jwt;
+    private readonly ITenantContext _tenant;
     private readonly ILogger<AdminController> _log;
 
-    public AdminController(AppDbContext db, ILogger<AdminController> log)
+    public AdminController(AppDbContext db, IJwtService jwt, ITenantContext tenant, ILogger<AdminController> log)
     {
         _db = db;
+        _jwt = jwt;
+        _tenant = tenant;
         _log = log;
     }
 
@@ -117,6 +121,40 @@ public class AdminController : ControllerBase
         return Ok(new AdminTenantDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
             t.MaxPosTerminals, t.LogoBase64, t.CreatedAt));
+    }
+
+    /// <summary>
+    /// Acesso de suporte: emite um token temporário com o tenant_id do cliente
+    /// e papel admin. Sem senha envolvida e sem refresh token — expira sozinho.
+    /// O RLS passa a enxergar o tenant do cliente pelo claim, como num login normal.
+    /// </summary>
+    [HttpPost("tenants/{id:guid}/impersonate")]
+    public async Task<ActionResult<ImpersonationResponse>> Impersonate(Guid id, CancellationToken ct)
+    {
+        var t = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+        if (!t.IsActive) return BadRequest(new { error = "Cliente bloqueado — reative antes de acessar." });
+
+        var superadminId = _tenant.UserId ?? Guid.Empty;
+
+        var (token, expiresAt) = _jwt.GenerateAccessToken(
+            new Models.Entities.User
+            {
+                Id = superadminId,
+                TenantId = t.Id,
+                Name = "Suporte SOLUÇÃO",
+                Email = "suporte@plataforma.interno",
+                Role = "admin",
+                PasswordHash = ""
+            },
+            t.Name);
+
+        _log.LogWarning("IMPERSONATION: superadmin {UserId} acessou o tenant {TenantName} ({TenantId})",
+            superadminId, t.Name, t.Id);
+
+        return Ok(new ImpersonationResponse(
+            token, expiresAt,
+            new Models.Dtos.Auth.UserDto(superadminId, t.Id, t.Name, "Suporte SOLUÇÃO", "suporte@plataforma.interno", "admin")));
     }
 
     [HttpGet("platform-logo")]

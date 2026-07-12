@@ -1,8 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Solucao.Backend.Controllers;
 using Solucao.Backend.Models.Dtos.Admin;
 using Solucao.Backend.Models.Entities;
+using Solucao.Backend.Services;
 using Solucao.Backend.Tests.Support;
 using Xunit;
 
@@ -13,7 +16,15 @@ public class AdminControllerTests
     private static (AdminController controller, Data.AppDbContext db) Setup()
     {
         var db = TestDb.Create();
-        return (new AdminController(db, NullLogger<AdminController>.Instance), db);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Issuer"] = "solucao-backend",
+            ["Jwt:Audience"] = "solucao-clients",
+            ["Jwt:Key"] = "0123456789abcdef0123456789abcdef-unit-test",
+        }).Build();
+        var tenantCtx = new TenantContext();
+        tenantCtx.SetContext(Guid.Parse("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "superadmin");
+        return (new AdminController(db, new JwtService(config), tenantCtx, NullLogger<AdminController>.Instance), db);
     }
 
     private static CreateTenantRequest ValidCreate(string cnpj = "12.345.678/0001-90", string segment = "farmacia") =>
@@ -75,6 +86,36 @@ public class AdminControllerTests
         var get = await controller.GetPlatformLogo(default);
         var dto = Assert.IsType<PlatformLogoDto>(Assert.IsType<OkObjectResult>(get.Result).Value);
         Assert.StartsWith("data:image/png", dto.LogoBase64);
+    }
+
+    [Fact]
+    public async Task Impersonate_IssuesTokenScopedToTargetTenant()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Cliente Alvo", Cnpj = "11222333000144" };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.Impersonate(tenant.Id, default);
+        var dto = Assert.IsType<ImpersonationResponse>(Assert.IsType<OkObjectResult>(response.Result).Value);
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(dto.AccessToken);
+        Assert.Equal(tenant.Id.ToString(), jwt.Claims.First(c => c.Type == JwtService.TenantIdClaim).Value);
+        Assert.Contains(jwt.Claims, c => c.Value == "admin");
+        Assert.Equal(tenant.Id, dto.User.TenantId);
+        Assert.Equal("admin", dto.User.Role);
+    }
+
+    [Fact]
+    public async Task Impersonate_RejectsBlockedTenant()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Bloqueado", Cnpj = "55666777000188", IsActive = false };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var response = await controller.Impersonate(tenant.Id, default);
+        Assert.IsType<BadRequestObjectResult>(response.Result);
     }
 
     [Fact]

@@ -32,3 +32,8 @@ public record UpdateTenantRequest(
     string PlanType);
 
 public record PlatformLogoDto(string? LogoBase64);
+
+public record ImpersonationResponse(
+    string AccessToken,
+    DateTime ExpiresAt,
+    Solucao.Backend.Models.Dtos.Auth.UserDto User);

@@ -42,6 +42,12 @@ export default function Layout() {
 
   // Superadmin é gestor da plataforma, não uma loja: só vê a Administração.
   const isSuper = user?.role === 'superadmin';
+  const impersonating = auth.isImpersonating();
+
+  const exitImpersonation = () => {
+    auth.exitImpersonation();
+    window.location.assign('/admin');
+  };
   const navItems = isSuper
     ? [{ to: '/admin', label: 'Administração', icon: '🛠️' }]
     : [
@@ -136,8 +142,19 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
-        <Outlet />
+      <main className="flex-1 overflow-auto flex flex-col">
+        {impersonating && (
+          <div className="bg-amber-400 text-amber-950 px-4 py-2 text-sm font-medium flex items-center justify-between gap-3 shrink-0">
+            <span>👁️ Acesso de suporte: você está vendo o painel de <strong>{user?.tenantName}</strong></span>
+            <button onClick={exitImpersonation}
+                    className="px-3 py-1 bg-amber-950 text-amber-100 rounded-md text-xs font-semibold hover:bg-amber-900 shrink-0">
+              ← Voltar ao painel admin
+            </button>
+          </div>
+        )}
+        <div className="flex-1 overflow-auto">
+          <Outlet />
+        </div>
       </main>
 
       {stockAlerts.length > 0 && (

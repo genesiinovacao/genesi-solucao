@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { auth } from '../lib/auth';
 
 export const SEGMENTS = [
   { value: 'supermercado', label: '🛒 Supermercado' },
@@ -215,6 +216,17 @@ export default function Admin() {
 
   useEffect(() => { load(); }, []);
 
+  const impersonate = async (t) => {
+    try {
+      const { data } = await api.post(`/api/admin/tenants/${t.id}/impersonate`);
+      auth.enterImpersonation({ accessToken: data.accessToken, user: data.user });
+      // Reload completo: Layout e páginas remontam já no contexto do cliente
+      window.location.assign('/dashboard');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
   const saveGlobalLogo = async (value) => {
     setLogoSaving(true);
     try {
@@ -285,7 +297,11 @@ export default function Admin() {
                     ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Ativo</span>
                     : <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Bloqueado</span>}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  {t.isActive && (
+                    <button onClick={() => impersonate(t)} title="Entrar no painel deste cliente como suporte"
+                            className="text-emerald-600 hover:underline text-sm mr-3">Acessar</button>
+                  )}
                   <button onClick={() => setEditing(t)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 </td>
               </tr>
