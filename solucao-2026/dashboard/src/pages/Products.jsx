@@ -100,19 +100,32 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-700 mb-1">Nome *</label>
               <input type="text" required value={form.name} onChange={set('name')}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                     placeholder="Arroz Branco 5kg" />
+                     placeholder="Nome do produto" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
-              <input type="text" value={form.category} onChange={set('category')} list="category-suggestions"
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                     placeholder={(SEGMENT_CATEGORIES[segment] || [])[0] || 'Categoria'} />
-              <datalist id="category-suggestions">
-                {(SEGMENT_CATEGORIES[segment] || []).map((c) => <option key={c} value={c} />)}
-              </datalist>
+              {(() => {
+                const categories = SEGMENT_CATEGORIES[segment] || [];
+                // Segmento "outro" não tem lista pré-definida: campo livre
+                if (categories.length === 0) {
+                  return <input type="text" value={form.category} onChange={set('category')}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                placeholder="Categoria do produto" />;
+                }
+                // Produto antigo com categoria fora da lista continua selecionável
+                const options = form.category && !categories.includes(form.category)
+                  ? [form.category, ...categories] : categories;
+                return (
+                  <select value={form.category} onChange={set('category')}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                    <option value="">— Sem categoria —</option>
+                    {options.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Unidade</label>
@@ -131,35 +144,35 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
               <label className="block text-xs font-semibold text-slate-700 mb-1">Código de barras</label>
               <input type="text" value={form.barcode} onChange={set('barcode')}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                     placeholder="7891234567890" />
+                     placeholder="Somente números" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">SKU (código interno)</label>
               <input type="text" value={form.sku} onChange={set('sku')}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                     placeholder="ARZ-5KG" />
+                     placeholder="Ex.: PROD-001" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de custo (R$)</label>
               <input type="number" step="0.01" min="0" value={form.costPrice} onChange={set('costPrice')}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="18.00" />
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0,00" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de venda (R$) *</label>
               <input type="number" step="0.01" min="0.01" required value={form.salePrice} onChange={set('salePrice')}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="25.00" />
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0,00" />
             </div>
             {!isEdit && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque inicial</label>
                 <input type="number" step="0.001" min="0" value={form.stockQuantity} onChange={set('stockQuantity')}
-                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="100" />
+                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0" />
               </div>
             )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque mínimo (alerta)</label>
               <input type="number" step="0.001" min="0" value={form.minStock} onChange={set('minStock')}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="10" />
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Validade (opcional)</label>
