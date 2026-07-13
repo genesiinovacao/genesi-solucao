@@ -136,16 +136,71 @@ public class ProductsController : ControllerBase
             p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
     }
 
+    public record AdjustStockRequest(decimal NewQuantity, string? Reason);
+
+    /// <summary>
+    /// Correção manual de estoque (inventário, cadastro errado, quebra).
+    /// Não edita o número por fora: grava um movimento "adjustment" com o
+    /// delta e o motivo, preservando a auditoria do estoque.
+    /// </summary>
+    [Authorize(Roles = "admin,manager")]
+    [HttpPost("{id:guid}/adjust-stock")]
+    public async Task<ActionResult<ProductDto>> AdjustStock(
+        Guid id, [FromBody] AdjustStockRequest req, CancellationToken ct)
+    {
+        if (req.NewQuantity < 0)
+            return BadRequest(new { error = "A quantidade em estoque não pode ser negativa." });
+
+        var p = await _db.Products.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (p is null) return NotFound();
+
+        var delta = req.NewQuantity - p.StockQuantity;
+        if (delta != 0)
+        {
+            p.StockQuantity = req.NewQuantity;
+            _db.StockMovements.Add(new StockMovement
+            {
+                TenantId = p.TenantId,
+                ProductId = p.Id,
+                UserId = _tenant.UserId,
+                MovementType = "adjustment",
+                Quantity = delta,
+                BalanceAfter = req.NewQuantity,
+                UnitCost = p.CostPrice,
+                ReferenceType = "manual",
+                Notes = string.IsNullOrWhiteSpace(req.Reason) ? "Ajuste manual" : req.Reason.Trim(),
+                CreatedAt = DateTime.UtcNow,
+            });
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new ProductDto(
+            p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
+            p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
+    }
+
     [Authorize(Roles = "admin,manager")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        // Soft delete to preserve sale history
         var p = await _db.Products.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return NotFound();
 
+        // Produto sem nenhuma venda/movimentação (cadastro errado, duplicado)
+        // pode sumir de verdade; com histórico é apenas desativado, senão as
+        // vendas antigas perderiam os itens (FK em cascata).
+        var hasHistory = await _db.SaleItems.AnyAsync(i => i.ProductId == id, ct)
+                      || await _db.StockMovements.AnyAsync(m => m.ProductId == id, ct);
+
+        if (!hasHistory)
+        {
+            _db.Products.Remove(p);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { removed = true });
+        }
+
         p.IsActive = false;
         await _db.SaveChangesAsync(ct);
-        return NoContent();
+        return Ok(new { removed = false });
     }
 }

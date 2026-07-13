@@ -185,7 +185,8 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
           {isEdit && (
             <p className="text-xs text-slate-400">
               O estoque atual ({product.stockQuantity} {product.unit}) não é editável aqui — ele muda
-              pelas vendas do PDV e devoluções, mantendo o histórico de movimentações.
+              pelas vendas do PDV e devoluções. Para corrigir a quantidade, use o botão
+              "Estoque" na listagem: o ajuste fica registrado no histórico de movimentações.
             </p>
           )}
 
@@ -207,6 +208,80 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
   );
 }
 
+const ADJUST_REASONS = [
+  'Correção de cadastro',
+  'Inventário / contagem',
+  'Entrada de mercadoria',
+  'Perda / quebra / vencimento',
+];
+
+function StockAdjustModal({ product, onClose, onSaved }) {
+  const [quantity, setQuantity] = useState(String(product.stockQuantity ?? 0));
+  const [reason, setReason] = useState(ADJUST_REASONS[0]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const delta = (Number(quantity) || 0) - (product.stockQuantity ?? 0);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      await api.post(`/api/products/${product.id}/adjust-stock`, {
+        newQuantity: Number(quantity), reason,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">📊 Ajustar estoque</h2>
+          <p className="text-xs text-slate-500 mt-1">{product.emoji} {product.name}</p>
+        </header>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="text-sm text-slate-600">
+            Estoque atual: <strong>{product.stockQuantity} {product.unit}</strong>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Nova quantidade *</label>
+            <input type="number" step="0.001" min="0" required autoFocus value={quantity}
+                   onChange={(e) => setQuantity(e.target.value)}
+                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+            {delta !== 0 && (
+              <p className={`text-xs mt-1 font-medium ${delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                {delta > 0 ? `+${delta}` : delta} {product.unit} em relação ao atual
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Motivo *</label>
+            <select value={reason} onChange={(e) => setReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+              {ADJUST_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-0.5">Fica registrado no histórico de movimentações</p>
+          </div>
+          {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving || delta === 0}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+              {saving ? 'Salvando…' : 'Confirmar ajuste'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Products() {
   const [data, setData] = useState({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 1 });
   const [loading, setLoading] = useState(false);
@@ -215,16 +290,20 @@ export default function Products() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null); // null | 'new' | produto
+  const [adjusting, setAdjusting] = useState(null); // produto do ajuste de estoque
   const [segment, setSegment] = useState('outro');
 
   useEffect(() => {
     api.get('/api/settings').then(({ data }) => setSegment(data.segment || 'outro')).catch(() => {});
   }, []);
 
-  const deactivate = async (p) => {
-    if (!window.confirm(`Desativar "${p.name}"?\n\nEle some da lista e do PDV, mas o histórico de vendas é preservado.`)) return;
+  const remove = async (p) => {
+    if (!window.confirm(`Excluir "${p.name}"?\n\nProduto que nunca teve venda ou movimentação é apagado de vez. Se já tiver histórico, ele é apenas desativado (some da lista e do PDV, mas as vendas antigas ficam preservadas).`)) return;
     try {
-      await api.delete(`/api/products/${p.id}`);
+      const { data } = await api.delete(`/api/products/${p.id}`);
+      if (data?.removed === false) {
+        alert(`"${p.name}" tinha histórico de vendas/movimentações, então foi desativado (não excluído).`);
+      }
       load();
     } catch (err) {
       alert(err.response?.data?.error || err.message);
@@ -365,8 +444,10 @@ export default function Products() {
                   </td>
                   <td className="px-4 py-3">{stockBadge(p)}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button onClick={() => setAdjusting(p)} title="Corrigir a quantidade em estoque"
+                            className="text-indigo-600 hover:underline text-sm mr-3">Estoque</button>
                     <button onClick={() => setEditing(p)} className="text-blue-600 hover:underline text-sm mr-3">Editar</button>
-                    <button onClick={() => deactivate(p)} className="text-red-500 hover:underline text-sm">Desativar</button>
+                    <button onClick={() => remove(p)} className="text-red-500 hover:underline text-sm">Excluir</button>
                   </td>
                 </tr>
               ))}
@@ -405,6 +486,14 @@ export default function Products() {
           segment={segment}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+
+      {adjusting && (
+        <StockAdjustModal
+          product={adjusting}
+          onClose={() => setAdjusting(null)}
+          onSaved={() => { setAdjusting(null); load(); }}
         />
       )}
     </div>
