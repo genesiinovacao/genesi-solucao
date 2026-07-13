@@ -8,6 +8,9 @@
   base    = "solucao-2026/dashboard"
   command = "npm run build"
   publish = "dist"
+  # Economia de créditos: só builda se algo mudou no dashboard (ou neste
+  # arquivo). Push que altera apenas backend/PDV/workflows não gasta build.
+  ignore  = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ../../netlify.toml"
 
 # SPA: qualquer rota (ex.: /register, /sales) cai no index.html do React Router
 [[redirects]]
