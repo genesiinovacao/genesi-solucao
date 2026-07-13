@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
+import { daysUntil } from '../lib/dates';
 
 export const SEGMENTS = [
   { value: 'supermercado', label: '🛒 Supermercado' },
@@ -17,20 +18,19 @@ export const SEGMENTS = [
 export const segmentLabel = (v) => SEGMENTS.find((s) => s.value === v)?.label || v;
 
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
-const daysLeft = (iso) => Math.ceil((new Date(`${iso}T23:59:59`) - new Date()) / 86400000);
 
 function SubscriptionBadge({ expiresAt }) {
   if (!expiresAt) return <span className="text-slate-400 text-xs">— sem controle</span>;
-  const d = daysLeft(expiresAt);
+  const d = daysUntil(expiresAt);
   if (d < 0)
     return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">⛔ Expirada em {fmtDate(expiresAt)}</span>;
   if (d <= 3)
-    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">⚠️ Expira em {d === 0 ? 'hoje' : `${d} dia(s)`} ({fmtDate(expiresAt)})</span>;
+    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">⚠️ Expira {d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`} ({fmtDate(expiresAt)})</span>;
   return <span className="text-slate-600 text-xs">{fmtDate(expiresAt)}</span>;
 }
 
 function RenewModal({ tenant, onClose, onSaved }) {
-  const base = tenant.subscriptionExpiresAt && daysLeft(tenant.subscriptionExpiresAt) > 0
+  const base = tenant.subscriptionExpiresAt && daysUntil(tenant.subscriptionExpiresAt) > 0
     ? new Date(`${tenant.subscriptionExpiresAt}T12:00:00`)
     : new Date();
   const suggested = new Date(base);

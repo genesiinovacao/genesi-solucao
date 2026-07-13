@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { daysUntil } from '../lib/dates';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
@@ -16,11 +17,9 @@ const SEGMENT_CATEGORIES = {
   outro: [],
 };
 
-const daysToExpiry = (iso) => Math.ceil((new Date(iso) - new Date()) / 86400000);
-
 const expiryBadge = (p) => {
   if (!p.expiryDate) return null;
-  const d = daysToExpiry(p.expiryDate);
+  const d = daysUntil(p.expiryDate);
   if (d < 0)   return <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">Vencido</span>;
   if (d <= 30) return <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Vence em {d}d</span>;
   return null;

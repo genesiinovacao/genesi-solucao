@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
+import { daysUntil } from '../lib/dates';
 import { createStockConnection } from '../lib/stockHub';
 
 export default function Layout() {
@@ -25,7 +26,7 @@ export default function Layout() {
 
   // Dias até expirar a assinatura (null = sem controle / não carregado)
   const subDaysLeft = branding?.subscriptionExpiresAt
-    ? Math.ceil((new Date(`${branding.subscriptionExpiresAt}T23:59:59`) - new Date()) / 86400000)
+    ? daysUntil(branding.subscriptionExpiresAt)
     : null;
   const showSubscriptionWarning = subDaysLeft !== null && subDaysLeft <= 3;
 
