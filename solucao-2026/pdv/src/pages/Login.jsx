@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { auth, API_BASE } from '../lib/auth';
@@ -10,6 +10,21 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState('idle');
+  const [version, setVersion] = useState('');
+  const [checkMsg, setCheckMsg] = useState('');
+
+  useEffect(() => {
+    window.pdv?.getAppVersion?.().then(setVersion).catch(() => {});
+  }, []);
+
+  const checkUpdates = async () => {
+    setCheckMsg('Verificando…');
+    const r = await window.pdv?.checkUpdates?.();
+    if (r?.status === 'dev') setCheckMsg('Modo desenvolvimento — sem atualização.');
+    else if (r?.ok) setCheckMsg('Se houver versão nova, o download começa sozinho.');
+    else setCheckMsg('Não foi possível verificar (sem internet?). O PDV segue normal.');
+    setTimeout(() => setCheckMsg(''), 6000);
+  };
 
   const bootstrap = async () => {
     setStep('bootstrap');
@@ -100,6 +115,13 @@ export default function Login() {
 
         <p className="text-xs text-slate-500 text-center mt-8">
           Use o login fornecido pela equipe SOLUÇÃO.
+        </p>
+        <p className="text-[11px] text-slate-600 text-center mt-3">
+          {version && <>v{version} · </>}
+          <button type="button" onClick={checkUpdates} className="underline hover:text-slate-400">
+            Verificar atualizações
+          </button>
+          {checkMsg && <span className="block mt-1 text-slate-500">{checkMsg}</span>}
         </p>
       </div>
     </div>

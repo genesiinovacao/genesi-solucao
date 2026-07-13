@@ -25,4 +25,14 @@ contextBridge.exposeInMainWorld('pdv', {
   // ---- Impressão térmica silenciosa ----
   listPrinters: ()             => ipcRenderer.invoke('print:list-printers'),
   printReceiptSilent: (payload) => ipcRenderer.invoke('print:receipt-silent', payload),
+
+  // ---- Atualizações do aplicativo (GitHub Releases) ----
+  getAppVersion:  () => ipcRenderer.invoke('sys:app-version'),
+  checkUpdates:   () => ipcRenderer.invoke('updates:check'),
+  installUpdate:  () => ipcRenderer.invoke('updates:install'),
+  onUpdateEvent:  (cb) => {
+    const listener = (_e, data) => cb(data);
+    ipcRenderer.on('updates:event', listener);
+    return () => ipcRenderer.removeListener('updates:event', listener);
+  },
 });

@@ -1,0 +1,48 @@
+# Gera o instalador do PDV e publica como Release no GitHub.
+# Os PDVs instalados verificam essa release e se atualizam sozinhos
+# (electron-updater lê o latest.yml publicado junto com o .exe).
+#
+# Como lançar uma versão nova:
+#   1. Aumente "version" em solucao-2026/pdv/package.json (ex.: 1.1.0 -> 1.1.1)
+#   2. Commit + push
+#   3. Aba Actions -> "Release do PDV" -> Run workflow
+#      (ou crie uma tag pdv-v1.1.1 e dê push nela)
+name: Release do PDV
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['pdv-v*']
+
+permissions:
+  contents: write   # electron-builder cria a release e sobe os artefatos
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: solucao-2026/pdv
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: solucao-2026/pdv/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build + publicar release
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Guardar instalador também como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solucao-pdv-installer
+          path: solucao-2026/pdv/release/SOLUCAO-PDV-Setup-*.exe
+          retention-days: 30

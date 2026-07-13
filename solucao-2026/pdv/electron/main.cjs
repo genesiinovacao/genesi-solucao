@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { initDb, getDb } = require('./db.cjs');
 const { registerSyncIpc } = require('./sync.cjs');
 const { registerPrintIpc } = require('./print.cjs');
+const { registerUpdaterIpc } = require('./updater.cjs');
 
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:5174';
@@ -148,6 +149,7 @@ app.whenReady().then(() => {
   registerDbIpc();
   registerSyncIpc();
   registerPrintIpc();
+  registerUpdaterIpc(() => mainWindow);
   createWindow();
 
   app.on('activate', () => {

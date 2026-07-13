@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from './lib/auth';
 import Login from './pages/Login';
 import PDV from './pages/PDV';
+import UpdateBanner from './components/UpdateBanner';
 
 function RequireAuth({ children }) {
   return auth.isAuthenticated() ? children : <Navigate to="/login" replace />;
@@ -9,10 +10,13 @@ function RequireAuth({ children }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/pdv" element={<RequireAuth><PDV /></RequireAuth>} />
-      <Route path="*" element={<Navigate to="/pdv" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/pdv" element={<RequireAuth><PDV /></RequireAuth>} />
+        <Route path="*" element={<Navigate to="/pdv" replace />} />
+      </Routes>
+      <UpdateBanner />
+    </>
   );
 }
