@@ -129,6 +129,49 @@ export default function PDV() {
     // eslint-disable-next-line
   }, [isOnline]);
 
+  // ---- Catalogue refresh (produtos/estoque alterados no dashboard) ----
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshCatalog = async (manual = false) => {
+    if (!navigator.onLine) {
+      if (manual) showToast('Sem internet — usando o catálogo local.', 'error');
+      return;
+    }
+    setRefreshing(true);
+    try {
+      // Vendas pendentes primeiro: o estoque do servidor só fica correto
+      // depois delas — senão o snapshot sobrescreveria o estoque local
+      // com um número que ainda não desconta o que foi vendido aqui.
+      const pending = await window.pdv.getPendingSales();
+      if (pending.length > 0) {
+        const r = await window.pdv.syncNow(API_BASE, auth.getAccessToken());
+        if (!r?.ok) {
+          if (manual) showToast('Há vendas pendentes que não sincronizaram — catálogo mantido.', 'error');
+          return;
+        }
+      }
+      const [p, c, settings] = await Promise.all([
+        api.get('/api/products', { params: { pageSize: 500 } }).then((r) => r.data.items),
+        api.get('/api/customers', { params: { pageSize: 1000 } }).then((r) => r.data.items),
+        api.get('/api/settings').then((r) => r.data).catch(() => null),
+      ]);
+      await window.pdv.saveSnapshot({ products: p, customers: c, settings });
+      await loadLocal();
+      if (manual) showToast('Catálogo atualizado.', 'success');
+    } catch (err) {
+      // Silencioso no automático — o PDV segue com o catálogo local
+      if (manual) showToast(`Falha ao atualizar: ${err?.message || err}`, 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    const t = setInterval(() => refreshCatalog(false), 5 * 60 * 1000);
+    if (isOnline) refreshCatalog(false); // já atualiza ao abrir a tela
+    return () => clearInterval(t);
+    // eslint-disable-next-line
+  }, [isOnline]);
+
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (e) => {
@@ -326,6 +369,9 @@ export default function PDV() {
                 ⚠️ Sync falhou · Tentar agora
               </button>
             )}
+            <button onClick={() => refreshCatalog(true)} disabled={refreshing}
+                    title="Atualizar catálogo agora (produtos e estoque do dashboard)"
+                    className={`text-slate-400 hover:text-white text-sm px-2 ${refreshing ? 'animate-spin' : ''}`}>🔄</button>
             <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
                     className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
             {globalLogo && (
