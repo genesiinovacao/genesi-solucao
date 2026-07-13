@@ -16,7 +16,8 @@ public record TenantSettingsDto(
     string? LogoBase64,
     string Segment,
     string? GlobalLogoBase64,
-    DateOnly? SubscriptionExpiresAt);
+    DateOnly? SubscriptionExpiresAt,
+    bool SubscriptionBlocked);
 
 public record UpdateTenantSettingsRequest(
     [Required, StringLength(255)] string Name,

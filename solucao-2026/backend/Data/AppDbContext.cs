@@ -28,6 +28,7 @@ public class AppDbContext : DbContext
     public DbSet<FiscalDocument> FiscalDocuments => Set<FiscalDocument>();
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
     public DbSet<PlatformSettings> PlatformSettings => Set<PlatformSettings>();
+    public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -55,6 +56,15 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
             e.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
+        });
+
+        b.Entity<BillingCharge>(e =>
+        {
+            e.ToTable("billing_charges");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasColumnType("decimal(12,2)");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.HasIndex(x => new { x.TenantId, x.CreatedAt });
         });
 
         b.Entity<RefreshToken>(e =>

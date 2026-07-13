@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { daysUntil } from '../lib/dates';
 import { createStockConnection } from '../lib/stockHub';
+import RenewSubscription from './RenewSubscription';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function Layout() {
   const user = auth.getUser();
   const [stockAlerts, setStockAlerts] = useState([]);
   const [branding, setBranding] = useState(null);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   // Logos + validade da assinatura (para o lembrete de pagamento)
   useEffect(() => {
@@ -19,7 +21,9 @@ export default function Layout() {
         clientLogo: data.logoBase64,
         globalLogo: data.globalLogoBase64,
         segment: data.segment,
+        planType: data.planType,
         subscriptionExpiresAt: data.subscriptionExpiresAt,
+        subscriptionBlocked: data.subscriptionBlocked,
       }))
       .catch(() => setBranding(null));
   }, []);
@@ -162,23 +166,62 @@ export default function Layout() {
             </button>
           </div>
         )}
-        {!isSuper && showSubscriptionWarning && (
-          <div className={`px-4 py-2 text-sm font-medium shrink-0 ${
+        {!isSuper && showSubscriptionWarning && !branding?.subscriptionBlocked && (
+          <div className={`px-4 py-2 text-sm font-medium shrink-0 flex items-center justify-between gap-3 ${
             subDaysLeft < 0 ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900 border-b border-amber-300'}`}>
-            {subDaysLeft < 0 ? (
-              <>⛔ Sua assinatura <strong>venceu</strong> em {new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}.
-                Regularize o pagamento com a equipe SOLUÇÃO para garantir a continuidade do sistema.</>
-            ) : (
-              <>⚠️ Sua assinatura vence {subDaysLeft === 0 ? 'hoje' : subDaysLeft === 1 ? 'amanhã' : `em ${subDaysLeft} dias`}
-                {' '}({new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}).
-                Lembre-se de efetuar o pagamento para continuar usando o sistema.</>
+            <span>
+              {subDaysLeft < 0 ? (
+                <>⛔ Sua assinatura <strong>venceu</strong> em {new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}.
+                  Renove agora para não perder o acesso.</>
+              ) : (
+                <>⚠️ Sua assinatura vence {subDaysLeft === 0 ? 'hoje' : subDaysLeft === 1 ? 'amanhã' : `em ${subDaysLeft} dias`}
+                  {' '}({new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}).</>
+              )}
+            </span>
+            {user?.role === 'admin' && (
+              <button onClick={() => setRenewOpen(true)}
+                      className={`px-3 py-1 rounded-md text-xs font-bold shrink-0 ${
+                        subDaysLeft < 0 ? 'bg-white text-red-700 hover:bg-red-50' : 'bg-amber-900 text-amber-50 hover:bg-amber-800'}`}>
+                💠 Renovar via PIX
+              </button>
             )}
           </div>
         )}
         <div className="flex-1 overflow-auto">
-          <Outlet />
+          {!isSuper && branding?.subscriptionBlocked ? (
+            <div className="h-full flex items-center justify-center p-8">
+              <div className="max-w-md text-center space-y-4">
+                <div className="text-6xl">🔒</div>
+                <h2 className="text-xl font-bold text-slate-800">Assinatura vencida</h2>
+                <p className="text-sm text-slate-600">
+                  Sua assinatura venceu em{' '}
+                  <strong>{new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}</strong>{' '}
+                  e o período de carência terminou. Renove para voltar a usar o sistema —
+                  seus dados estão preservados.
+                </p>
+                {user?.role === 'admin' ? (
+                  <button onClick={() => setRenewOpen(true)}
+                          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold">
+                    💠 Renovar assinatura via PIX
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-400">Peça ao administrador da loja para renovar a assinatura.</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </div>
       </main>
+
+      {renewOpen && (
+        <RenewSubscription
+          currentPlan={branding?.planType}
+          onClose={() => setRenewOpen(false)}
+          onRenewed={() => window.location.reload()}
+        />
+      )}
 
       {stockAlerts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm">

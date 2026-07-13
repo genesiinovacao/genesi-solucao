@@ -8,6 +8,7 @@ using Solucao.Backend.Data;
 using Solucao.Backend.Hubs;
 using Solucao.Backend.Middleware;
 using Solucao.Backend.Services;
+using Solucao.Backend.Services.Billing;
 using Solucao.Backend.Services.Fiscal;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +34,22 @@ builder.Services.AddSingleton<IFiscalProvider>(sp =>
     {
         "simulated" => new SimulatedFiscalProvider(),
         var other => throw new InvalidOperationException($"Fiscal provider desconhecido: {other}"),
+    });
+
+// PIX: provider selecionado por config, no mesmo padrão do fiscal.
+// "simulated" paga sozinho em ~20s (demo); "mercadopago" cobra de verdade.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("mercadopago");
+builder.Services.AddSingleton<IPixProvider>(sp =>
+    builder.Configuration.GetValue("Billing:Provider", "simulated") switch
+    {
+        "simulated" => new SimulatedPixProvider(),
+        "mercadopago" => new MercadoPagoPixProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("mercadopago"),
+            builder.Configuration["Billing:MercadoPago:AccessToken"]
+                ?? throw new InvalidOperationException(
+                    "Billing:MercadoPago:AccessToken ausente — defina Billing__MercadoPago__AccessToken.")),
+        var other => throw new InvalidOperationException($"PIX provider desconhecido: {other}"),
     });
 
 builder.Services.AddDbContext<AppDbContext>((sp, opt) =>
@@ -152,6 +169,7 @@ app.UseCors();
 
 app.UseAuthentication();
 app.UseMiddleware<TenantMiddleware>();   // runs AFTER auth, BEFORE authorize
+app.UseMiddleware<SubscriptionGateMiddleware>(); // 402 se a assinatura venceu além da carência
 app.UseAuthorization();
 
 app.MapControllers();

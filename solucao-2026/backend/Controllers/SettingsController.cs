@@ -14,12 +14,19 @@ public class SettingsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IConfiguration _config;
 
-    public SettingsController(AppDbContext db, ITenantContext tenant)
+    public SettingsController(AppDbContext db, ITenantContext tenant, IConfiguration config)
     {
         _db = db;
         _tenant = tenant;
+        _config = config;
     }
+
+    // Espelha a régua do SubscriptionGateMiddleware: vencida além da carência
+    private bool IsBlocked(DateOnly? expiresAt) =>
+        expiresAt is { } exp &&
+        DateOnly.FromDateTime(DateTime.Now) >= exp.AddDays(_config.GetValue("Billing:GraceDays", 3) + 1);
 
     // The "tenants" table has no RLS (it's the control plane), so we
     // filter explicitly by the authenticated tenant_id every time.
@@ -37,7 +44,8 @@ public class SettingsController : ControllerBase
 
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo, t.SubscriptionExpiresAt));
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt)));
     }
 
     [HttpPut]
@@ -64,6 +72,7 @@ public class SettingsController : ControllerBase
 
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo, t.SubscriptionExpiresAt));
+            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt)));
     }
 }
