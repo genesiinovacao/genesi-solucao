@@ -6,16 +6,16 @@
 #   1. Aumente "version" em solucao-2026/pdv/package.json (ex.: 1.1.0 -> 1.1.1)
 #   2. Commit + push
 #   3. Aba Actions -> "Release do PDV" -> Run workflow
-#      (ou crie uma tag pdv-v1.1.1 e dê push nela)
+#      (ou crie uma tag v1.1.1 e dê push nela)
 name: Release do PDV
 
 on:
   workflow_dispatch:
   push:
-    tags: ['pdv-v*']
+    tags: ['v*']
 
 permissions:
-  contents: write   # electron-builder cria a release e sobe os artefatos
+  contents: write   # necessário para criar a release e subir os artefatos
 
 jobs:
   release:
@@ -35,14 +35,26 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      - name: Build + publicar release
-        run: npm run release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gerar instalador (sem publicar — a release é o passo seguinte)
+        run: |
+          npm run build
+          npx electron-builder --win --publish never
 
-      - name: Guardar instalador também como artifact
-        uses: actions/upload-artifact@v4
+      - name: Definir tag da release (v + versão do package.json)
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $tag = "${{ github.ref_name }}" }
+          else { $tag = "v" + (Get-Content package.json | ConvertFrom-Json).version }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "Release: $tag"
+
+      - name: Publicar release com os artefatos do auto-update
+        uses: softprops/action-gh-release@v2
         with:
-          name: solucao-pdv-installer
-          path: solucao-2026/pdv/release/SOLUCAO-PDV-Setup-*.exe
-          retention-days: 30
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: SOLUCAO PDV ${{ steps.tag.outputs.tag }}
+          files: |
+            solucao-2026/pdv/release/SOLUCAO-PDV-Setup-*.exe
+            solucao-2026/pdv/release/SOLUCAO-PDV-Setup-*.exe.blockmap
+            solucao-2026/pdv/release/latest.yml
