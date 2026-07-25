@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { maskCpfCnpj, formatDoc, onlyDigits } from '../lib/masks';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
@@ -54,7 +55,7 @@ export default function Customers() {
     setEditing(c.id);
     setForm({
       name: c.name || '',
-      taxId: c.taxId || '',
+      taxId: maskCpfCnpj(c.taxId || ''),
       email: c.email || '',
       phone: c.phone || '',
       address: c.address || '',
@@ -72,6 +73,9 @@ export default function Customers() {
     try {
       const payload = {
         ...form,
+        // Guarda só os dígitos: a máscara é apresentação, e o documento
+        // formatado no banco quebraria a busca por número puro.
+        taxId: onlyDigits(form.taxId) || null,
         loyaltyPoints: Number(form.loyaltyPoints) || 0,
         birthDate: form.birthDate || null,
       };
@@ -207,7 +211,7 @@ export default function Customers() {
                       </div>
                       <div>
                         <div className="font-medium text-slate-800">{c.name}</div>
-                        <div className="text-xs text-slate-400 font-mono">{c.taxId || '—'}</div>
+                        <div className="text-xs text-slate-400 font-mono">{formatDoc(c.taxId)}</div>
                       </div>
                     </div>
                   </td>
@@ -276,9 +280,10 @@ export default function Customers() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">CPF</label>
-                    <input type="text" value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })}
-                           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">CPF / CNPJ</label>
+                    <input type="text" inputMode="numeric" maxLength={18} placeholder="000.000.000-00"
+                           value={form.taxId} onChange={(e) => setForm({ ...form, taxId: maskCpfCnpj(e.target.value) })}
+                           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Telefone</label>

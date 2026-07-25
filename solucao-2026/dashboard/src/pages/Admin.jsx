@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { daysUntil } from '../lib/dates';
+import { maskCnpj, formatDoc } from '../lib/masks';
 
 export const SEGMENTS = [
   { value: 'supermercado', label: '🛒 Supermercado' },
@@ -244,7 +245,7 @@ function DeleteModal({ tenant, onClose, onDeleted }) {
       <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
         <header className="p-6 border-b border-slate-200">
           <h2 className="text-lg font-bold text-red-700">🗑️ Excluir cliente</h2>
-          <p className="text-xs text-slate-500 mt-1">{tenant.name} — {tenant.cnpj}</p>
+          <p className="text-xs text-slate-500 mt-1">{tenant.name} — {formatDoc(tenant.cnpj)}</p>
         </header>
         <div className="p-6 space-y-4">
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -327,7 +328,7 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
     return d.toISOString().slice(0, 10);
   };
   const [form, setForm] = useState(isEdit ? {
-    name: tenant.name, cnpj: tenant.cnpj, segment: tenant.segment,
+    name: tenant.name, cnpj: maskCnpj(tenant.cnpj || ''), segment: tenant.segment,
     logoBase64: tenant.logoBase64, maxPosTerminals: tenant.maxPosTerminals,
     subscriptionExpiresAt: tenant.subscriptionExpiresAt || '',
     subscriptionIsBonus: tenant.subscriptionIsBonus || false,
@@ -392,7 +393,10 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ *</label>
-              <input type="text" required value={form.cnpj} onChange={set('cnpj')} disabled={isEdit}
+              <input type="text" required inputMode="numeric" maxLength={18}
+                     value={form.cnpj}
+                     onChange={(e) => setForm((f) => ({ ...f, cnpj: maskCnpj(e.target.value) }))}
+                     disabled={isEdit}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono disabled:bg-slate-50 disabled:text-slate-400"
                      placeholder="00.000.000/0000-00" />
             </div>
@@ -591,7 +595,7 @@ export default function Admin() {
                     <span className="font-medium text-slate-800">{t.name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{t.cnpj}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500">{formatDoc(t.cnpj)}</td>
                 <td className="px-4 py-3 text-slate-600">{segmentLabel(t.segment)}</td>
                 <td className="px-4 py-3 text-slate-600 capitalize">{t.planType}</td>
                 <td className="px-4 py-3 text-right text-slate-700 font-semibold">{t.maxPosTerminals}</td>

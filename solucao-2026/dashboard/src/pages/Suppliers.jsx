@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { maskCnpj, formatDoc, onlyDigits } from '../lib/masks';
 
 export default function Suppliers() {
   const [data, setData] = useState({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 1 });
@@ -36,7 +37,7 @@ export default function Suppliers() {
   const openEdit = (s) => {
     setEditing(s.id);
     setForm({
-      name: s.name || '', cnpj: s.cnpj || '', contactName: s.contactName || '',
+      name: s.name || '', cnpj: maskCnpj(s.cnpj || ''), contactName: s.contactName || '',
       phone: s.phone || '', email: s.email || '', address: s.address || '',
       category: s.category || '', status: s.status || 'active', notes: s.notes || '',
     });
@@ -47,8 +48,10 @@ export default function Suppliers() {
     e.preventDefault();
     setSaving(true);
     try {
-      if (editing === 'new') await api.post('/api/suppliers', form);
-      else                    await api.put(`/api/suppliers/${editing}`, form);
+      // Máscara é apresentação: no banco vai só o número
+      const payload = { ...form, cnpj: onlyDigits(form.cnpj) || null };
+      if (editing === 'new') await api.post('/api/suppliers', payload);
+      else                    await api.put(`/api/suppliers/${editing}`, payload);
       close();
       await load();
     } catch (err) {
@@ -115,7 +118,7 @@ export default function Suppliers() {
               {!loading && data.items.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{s.cnpj || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-600">{formatDoc(s.cnpj)}</td>
                   <td className="px-4 py-3 text-slate-600">
                     <div>{s.contactName || '—'}</div>
                     <div className="text-xs text-slate-400">{s.phone || s.email || ''}</div>
@@ -168,8 +171,9 @@ export default function Suppliers() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ</label>
-                    <input type="text" value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                    <input type="text" inputMode="numeric" maxLength={18} placeholder="00.000.000/0000-00"
+                           value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: maskCnpj(e.target.value) })}
+                           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
