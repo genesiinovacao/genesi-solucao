@@ -24,6 +24,7 @@ export default function Layout() {
         planType: data.planType,
         subscriptionExpiresAt: data.subscriptionExpiresAt,
         subscriptionBlocked: data.subscriptionBlocked,
+        subscriptionIsBonus: data.subscriptionIsBonus,
       }))
       .catch(() => setBranding(null));
   }, []);
@@ -129,6 +130,28 @@ export default function Layout() {
             );
           })}
         </nav>
+
+        {/* Validade do acesso — cortesia em destaque, para o cliente saber
+            até quando vale sem precisar perguntar ao suporte */}
+        {!isSuper && branding?.subscriptionExpiresAt && (
+          <div className="px-4 pb-3">
+            {branding.subscriptionIsBonus ? (
+              <div className="rounded-lg bg-purple-500/15 border border-purple-400/30 px-3 py-2">
+                <p className="text-[11px] font-bold text-purple-200">🎁 Período de cortesia</p>
+                <p className="text-[11px] text-purple-200/75 mt-0.5">
+                  Válido até {new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}
+                  {subDaysLeft !== null && subDaysLeft >= 0 && (
+                    <> · {subDaysLeft === 0 ? 'último dia' : subDaysLeft === 1 ? 'resta 1 dia' : `restam ${subDaysLeft} dias`}</>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 px-1">
+                Assinatura até {new Date(`${branding.subscriptionExpiresAt}T12:00:00`).toLocaleDateString('pt-BR')}
+              </p>
+            )}
+          </div>
+        )}
 
         {!isSuper && branding?.globalLogo && (
           <div className="px-4 pb-3 flex items-center justify-center gap-2">

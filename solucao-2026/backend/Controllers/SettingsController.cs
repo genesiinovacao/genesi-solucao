@@ -48,7 +48,7 @@ public class SettingsController : ControllerBase
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
-            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt)));
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
     }
 
     [HttpPut]
@@ -76,6 +76,6 @@ public class SettingsController : ControllerBase
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
-            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt)));
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
     }
 }
