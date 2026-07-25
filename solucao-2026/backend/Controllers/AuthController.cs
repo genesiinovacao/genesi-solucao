@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Solucao.Backend.Data;
@@ -196,6 +198,90 @@ public class AuthController : ControllerBase
             .FirstOrDefaultAsync(ct) ?? "";
 
         return Ok(new UserDto(u.Id, u.TenantId, tenantName, u.Name, u.Email, u.Role));
+    }
+
+    // =======================================================================
+    // Rede de lojas — o funcionário alterna entre as filiais do mesmo grupo
+    // =======================================================================
+
+    public record StoreDto(Guid Id, string Name, string Cnpj, bool IsActive, bool IsCurrent);
+    public record SwitchStoreRequest(Guid TenantId);
+
+    /// <summary>
+    /// Lojas do grupo da loja atual. Lista vazia (ou uma só) significa que o
+    /// cliente não faz parte de uma rede — o front nem mostra o seletor.
+    /// </summary>
+    [HttpGet("stores")]
+    [Authorize]
+    public async Task<ActionResult<List<StoreDto>>> Stores(CancellationToken ct)
+    {
+        var tenantIdClaim = User.FindFirstValue(JwtService.TenantIdClaim);
+        if (!Guid.TryParse(tenantIdClaim, out var currentTenantId)) return Unauthorized();
+
+        var current = await _db.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == currentTenantId, ct);
+        if (current is null) return NotFound();
+
+        // Sem grupo: a própria loja é a única
+        if (current.GroupId is null)
+            return Ok(new List<StoreDto> { new(current.Id, current.Name, current.Cnpj, current.IsActive, true) });
+
+        var stores = await _db.Tenants.AsNoTracking()
+            .Where(t => t.GroupId == current.GroupId)
+            .OrderBy(t => t.Name)
+            .ToListAsync(ct);
+
+        return Ok(stores
+            .Select(t => new StoreDto(t.Id, t.Name, t.Cnpj, t.IsActive, t.Id == currentTenantId))
+            .ToList());
+    }
+
+    /// <summary>
+    /// Emite um token para outra loja da mesma rede. O usuário continua sendo
+    /// o mesmo; muda o tenant_id — e com ele todo o escopo do RLS.
+    /// </summary>
+    [HttpPost("switch-store")]
+    [Authorize]
+    public async Task<ActionResult<LoginResponse>> SwitchStore(
+        [FromBody] SwitchStoreRequest req, CancellationToken ct)
+    {
+        var tenantIdClaim = User.FindFirstValue(JwtService.TenantIdClaim);
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!Guid.TryParse(tenantIdClaim, out var currentTenantId) ||
+            !Guid.TryParse(userIdClaim, out var userId)) return Unauthorized();
+
+        var current = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == currentTenantId, ct);
+        var target = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == req.TenantId, ct);
+        if (current is null || target is null) return NotFound();
+
+        // A trava do modelo: só troca dentro da mesma rede, e rede precisa existir
+        if (current.GroupId is null || target.GroupId != current.GroupId)
+            return Forbid();
+        if (!target.IsActive)
+            return BadRequest(new { error = $"A loja {target.Name} está bloqueada." });
+
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null || !user.IsActive) return Unauthorized();
+
+        var (access, expiresAt) = _jwt.GenerateAccessToken(
+            new User
+            {
+                Id = user.Id,
+                TenantId = target.Id,          // passa a operar na filial escolhida
+                Name = user.Name,
+                Email = user.Email,
+                Role = user.Role,
+                PasswordHash = ""
+            },
+            target.Name);
+
+        _log.LogInformation("Troca de loja: usuário {UserId} de {De} para {Para}",
+            userId, current.Name, target.Name);
+
+        // Sem refresh token: a sessão da filial expira sozinha, como no suporte
+        return Ok(new LoginResponse(
+            access, "", expiresAt,
+            new UserDto(user.Id, target.Id, target.Name, user.Name, user.Email, user.Role)));
     }
 
     /// <summary>IP de origem — atrás do proxy vem no X-Forwarded-For.</summary>

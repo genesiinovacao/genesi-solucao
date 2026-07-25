@@ -13,7 +13,12 @@ public record AdminTenantDto(
     string? LogoBase64,
     DateOnly? SubscriptionExpiresAt,
     bool SubscriptionIsBonus,
+    Guid? GroupId,
+    string? GroupName,
     DateTime CreatedAt);
+
+public record TenantGroupDto(Guid Id, string Name, int StoreCount);
+public record CreateGroupRequest(string Name);
 
 public record CreateTenantRequest(
     [Required, MinLength(2), MaxLength(255)] string TenantName,
@@ -23,6 +28,7 @@ public record CreateTenantRequest(
     [Range(0, 100)] int MaxPosTerminals,
     DateOnly? SubscriptionExpiresAt,
     bool SubscriptionIsBonus,
+    Guid? GroupId,
     [Required, MinLength(2), MaxLength(255)] string UserName,
     [Required, EmailAddress] string Email,
     [Required, MinLength(6)] string Password);
@@ -34,6 +40,7 @@ public record UpdateTenantRequest(
     [Range(0, 100)] int MaxPosTerminals,
     DateOnly? SubscriptionExpiresAt,
     bool SubscriptionIsBonus,
+    Guid? GroupId,
     bool IsActive,
     string PlanType);
 

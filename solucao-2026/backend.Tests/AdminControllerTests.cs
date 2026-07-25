@@ -31,7 +31,7 @@ public class AdminControllerTests
     }
 
     private static CreateTenantRequest ValidCreate(string cnpj = "12.345.678/0001-90", string segment = "farmacia") =>
-        new("Farmácia Central", cnpj, segment, null, 2, null, false, "Ana Farm", "ana@farmacia.com", "123456");
+        new("Farmácia Central", cnpj, segment, null, 2, null, false, null, "Ana Farm", "ana@farmacia.com", "123456");
 
     [Theory]
     [InlineData("123")]
@@ -69,7 +69,7 @@ public class AdminControllerTests
         db.SaveChanges();
 
         var response = await controller.UpdateTenant(tenant.Id,
-            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, null, false, false, "premium"), default);
+            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, null, false, null, false, "premium"), default);
 
         var dto = Assert.IsType<AdminTenantDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
         Assert.Equal("Loja X Renomeada", dto.Name);

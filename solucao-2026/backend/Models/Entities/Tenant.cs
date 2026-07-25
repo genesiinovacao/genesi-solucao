@@ -15,6 +15,8 @@ public class Tenant
     public string? LogoEmoji { get; set; }
     public string? LogoBase64 { get; set; }
     public string Segment { get; set; } = "supermercado";
+    /// <summary>Rede a que esta loja pertence (nulo = loja única).</summary>
+    public Guid? GroupId { get; set; }
     public int MaxPosTerminals { get; set; } = 1;
     public DateOnly? SubscriptionExpiresAt { get; set; }
     /// <summary>Período atual é cortesia (não gerou receita) — marcado pelo superadmin.</summary>

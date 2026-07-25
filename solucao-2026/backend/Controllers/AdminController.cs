@@ -43,9 +43,45 @@ public class AdminController : ControllerBase
         _log = log;
     }
 
-    private static AdminTenantDto ToDto(Models.Entities.Tenant t) => new(
+    private static AdminTenantDto ToDto(Models.Entities.Tenant t, string? groupName = null) => new(
         t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-        t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.SubscriptionIsBonus, t.CreatedAt);
+        t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.SubscriptionIsBonus,
+        t.GroupId, groupName, t.CreatedAt);
+
+    // ---- Redes de lojas (grupo econômico) ----
+
+    [HttpGet("groups")]
+    public async Task<ActionResult<List<TenantGroupDto>>> ListGroups(CancellationToken ct)
+    {
+        var groups = await _db.TenantGroups.AsNoTracking().OrderBy(g => g.Name).ToListAsync(ct);
+        var counts = await _db.Tenants.AsNoTracking()
+            .Where(t => t.GroupId != null)
+            .GroupBy(t => t.GroupId!.Value)
+            .Select(g => new { GroupId = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        return Ok(groups.Select(g => new TenantGroupDto(
+            g.Id, g.Name, counts.FirstOrDefault(c => c.GroupId == g.Id)?.Count ?? 0)).ToList());
+    }
+
+    [HttpPost("groups")]
+    public async Task<ActionResult<TenantGroupDto>> CreateGroup([FromBody] CreateGroupRequest req, CancellationToken ct)
+    {
+        var name = req.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name) || name.Length < 2)
+            return BadRequest(new { error = "Informe o nome da rede (mínimo 2 caracteres)." });
+
+        var group = new Models.Entities.TenantGroup { Id = Guid.NewGuid(), Name = name, CreatedAt = DateTime.UtcNow };
+        _db.TenantGroups.Add(group);
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Rede criada: {Name} ({Id})", group.Name, group.Id);
+        return Ok(new TenantGroupDto(group.Id, group.Name, 0));
+    }
+
+    /// <summary>Valida que a rede informada existe antes de vincular a loja.</summary>
+    private async Task<bool> GroupExistsAsync(Guid? groupId, CancellationToken ct) =>
+        groupId is null || await _db.TenantGroups.AnyAsync(g => g.Id == groupId, ct);
 
     /// <summary>
     /// Registra no histórico financeiro um período concedido como cortesia.
@@ -83,7 +119,11 @@ public class AdminController : ControllerBase
             .OrderBy(t => t.Name)
             .ToListAsync(ct);
 
-        return Ok(tenants.Select(ToDto).ToList());
+        var groups = await _db.TenantGroups.AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.Name, ct);
+
+        return Ok(tenants
+            .Select(t => ToDto(t, t.GroupId is { } gid && groups.TryGetValue(gid, out var n) ? n : null))
+            .ToList());
     }
 
     /// <summary>Histórico financeiro do cliente: cobranças pagas e bonificações.</summary>
@@ -111,6 +151,8 @@ public class AdminController : ControllerBase
             return BadRequest(new { error = $"Segmento inválido. Opções: {string.Join(", ", Segments)}" });
         if (req.LogoBase64 is { Length: > MaxLogoBase64Length })
             return BadRequest(new { error = "Logo muito grande — use uma imagem de até ~200 KB." });
+        if (!await GroupExistsAsync(req.GroupId, ct))
+            return BadRequest(new { error = "Rede informada não existe." });
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(req.Password);
 
@@ -143,6 +185,7 @@ public class AdminController : ControllerBase
         t.MaxPosTerminals = req.MaxPosTerminals;
         t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
         t.SubscriptionIsBonus = req.SubscriptionIsBonus && req.SubscriptionExpiresAt is not null;
+        t.GroupId = req.GroupId;
 
         if (t.SubscriptionIsBonus)
             RecordBonus(t, null, req.SubscriptionExpiresAt!.Value, "Bonificação no cadastro do cliente");
@@ -162,6 +205,8 @@ public class AdminController : ControllerBase
             return BadRequest(new { error = $"Segmento inválido. Opções: {string.Join(", ", Segments)}" });
         if (req.LogoBase64 is { Length: > MaxLogoBase64Length })
             return BadRequest(new { error = "Logo muito grande — use uma imagem de até ~200 KB." });
+        if (!await GroupExistsAsync(req.GroupId, ct))
+            return BadRequest(new { error = "Rede informada não existe." });
 
         var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t is null) return NotFound();
@@ -175,6 +220,7 @@ public class AdminController : ControllerBase
         t.MaxPosTerminals = req.MaxPosTerminals;
         t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
         t.SubscriptionIsBonus = req.SubscriptionIsBonus && req.SubscriptionExpiresAt is not null;
+        t.GroupId = req.GroupId;
         t.IsActive = req.IsActive;
         t.PlanType = req.PlanType;
 

@@ -31,6 +31,16 @@ export const auth = {
     localStorage.removeItem(KEY_SA_USER);
   },
 
+  /**
+   * Troca a loja ativa (rede de filiais) preservando qualquer sessão de
+   * suporte guardada — só o token de acesso e o usuário mudam.
+   */
+  replaceSession: ({ accessToken, user }) => {
+    localStorage.setItem(KEY_ACCESS, accessToken);
+    localStorage.setItem(KEY_USER, JSON.stringify(user));
+    localStorage.removeItem(KEY_REFRESH); // token da filial não renova
+  },
+
   // ---- Impersonação (acesso de suporte do superadmin a um cliente) ----
   isImpersonating: () => !!localStorage.getItem(KEY_SA_ACCESS),
 

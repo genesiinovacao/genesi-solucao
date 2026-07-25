@@ -25,6 +25,7 @@ services:
       - ./database/12_billing.sql:/docker-entrypoint-initdb.d/12_billing.sql:ro
       - ./database/13_billing_cycle.sql:/docker-entrypoint-initdb.d/13_billing_cycle.sql:ro
       - ./database/14_lgpd.sql:/docker-entrypoint-initdb.d/14_lgpd.sql:ro
+      - ./database/15_tenant_groups.sql:/docker-entrypoint-initdb.d/15_tenant_groups.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U solucao_admin -d solucao"]
       interval: 5s

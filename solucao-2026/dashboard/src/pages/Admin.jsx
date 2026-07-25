@@ -318,7 +318,7 @@ function LogoPicker({ value, onChange, label }) {
   );
 }
 
-function TenantFormModal({ tenant, onClose, onSaved }) {
+function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
   // Novo cliente já nasce alinhado ao vencimento padrão: próximo dia 25
   const defaultExpiry = () => {
@@ -332,12 +332,14 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
     logoBase64: tenant.logoBase64, maxPosTerminals: tenant.maxPosTerminals,
     subscriptionExpiresAt: tenant.subscriptionExpiresAt || '',
     subscriptionIsBonus: tenant.subscriptionIsBonus || false,
+    groupId: tenant.groupId || '',
     isActive: tenant.isActive, planType: tenant.planType,
     userName: '', email: '', password: '',
   } : {
     name: '', cnpj: '', segment: 'supermercado', logoBase64: null,
     maxPosTerminals: 1, subscriptionExpiresAt: defaultExpiry(),
     subscriptionIsBonus: false,
+    groupId: '',
     isActive: true, planType: 'standard',
     userName: '', email: '', password: '',
   });
@@ -360,6 +362,7 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
           maxPosTerminals: Number(form.maxPosTerminals),
           subscriptionExpiresAt: form.subscriptionExpiresAt || null,
           subscriptionIsBonus: form.subscriptionIsBonus,
+          groupId: form.groupId || null,
           isActive: form.isActive, planType: form.planType,
         });
       } else {
@@ -368,6 +371,7 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
           logoBase64: form.logoBase64, maxPosTerminals: Number(form.maxPosTerminals),
           subscriptionExpiresAt: form.subscriptionExpiresAt || null,
           subscriptionIsBonus: form.subscriptionIsBonus,
+          groupId: form.groupId || null,
           userName: form.userName, email: form.email, password: form.password,
         });
       }
@@ -443,6 +447,33 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Rede de lojas (opcional)</label>
+            <div className="flex gap-2">
+              <select value={form.groupId} onChange={set('groupId')}
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                <option value="">— Loja única (sem rede) —</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name} ({g.storeCount} loja(s))</option>
+                ))}
+              </select>
+              <button type="button"
+                      onClick={async () => {
+                        const name = prompt('Nome da rede (ex.: Grupo Silva):');
+                        if (!name?.trim()) return;
+                        const created = await onGroupCreated(name.trim());
+                        if (created) setForm((f) => ({ ...f, groupId: created.id }));
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs whitespace-nowrap">
+                ＋ Nova rede
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Filiais do mesmo dono compartilham a rede: o funcionário alterna entre elas sem novo login.
+              Estoque, vendas e assinatura continuam separados por loja.
+            </p>
+          </div>
+
           <LogoPicker label="Logo do cliente (aparece no dashboard e no PDV dele)"
                       value={form.logoBase64} onChange={(v) => setForm((f) => ({ ...f, logoBase64: v }))} />
 
@@ -502,6 +533,7 @@ export default function Admin() {
   const [renewing, setRenewing] = useState(null); // tenant sendo renovado
   const [deleting, setDeleting] = useState(null); // tenant sendo excluído
   const [viewingCharges, setViewingCharges] = useState(null); // histórico financeiro
+  const [groups, setGroups] = useState([]);
   const [globalLogo, setGlobalLogo] = useState(null);
   const [logoSaving, setLogoSaving] = useState(false);
 
@@ -509,12 +541,14 @@ export default function Admin() {
     setLoading(true);
     setError('');
     try {
-      const [{ data: list }, { data: logo }] = await Promise.all([
+      const [{ data: list }, { data: logo }, { data: grps }] = await Promise.all([
         api.get('/api/admin/tenants'),
         api.get('/api/admin/platform-logo'),
+        api.get('/api/admin/groups'),
       ]);
       setTenants(list);
       setGlobalLogo(logo.logoBase64);
+      setGroups(grps);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally { setLoading(false); }
@@ -530,6 +564,17 @@ export default function Admin() {
       window.location.assign('/dashboard');
     } catch (err) {
       alert(err.response?.data?.error || err.message);
+    }
+  };
+
+  const createGroup = async (name) => {
+    try {
+      const { data } = await api.post('/api/admin/groups', { name });
+      setGroups((gs) => [...gs, data].sort((a, b) => a.name.localeCompare(b.name)));
+      return data;
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+      return null;
     }
   };
 
@@ -592,7 +637,14 @@ export default function Admin() {
                     {t.logoBase64
                       ? <img src={t.logoBase64} alt="" className="w-9 h-9 object-contain rounded-lg border border-slate-100 bg-white" />
                       : <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">🏪</div>}
-                    <span className="font-medium text-slate-800">{t.name}</span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-slate-800">{t.name}</span>
+                      {t.groupName && (
+                        <span className="block text-[11px] text-blue-600" title="Rede de lojas">
+                          🏬 {t.groupName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{formatDoc(t.cnpj)}</td>
@@ -629,6 +681,8 @@ export default function Admin() {
       {editing && (
         <TenantFormModal
           tenant={editing === 'new' ? null : editing}
+          groups={groups}
+          onGroupCreated={createGroup}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
         />

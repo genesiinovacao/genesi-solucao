@@ -13,6 +13,30 @@ export default function Layout() {
   const [stockAlerts, setStockAlerts] = useState([]);
   const [branding, setBranding] = useState(null);
   const [renewOpen, setRenewOpen] = useState(false);
+  const [stores, setStores] = useState([]);        // lojas da rede (quando houver)
+  const [switching, setSwitching] = useState(false);
+
+  // Rede de lojas: só aparece se o cliente tiver mais de uma unidade
+  useEffect(() => {
+    if (isSuper) return;
+    api.get('/api/auth/stores')
+      .then(({ data }) => setStores(data.length > 1 ? data : []))
+      .catch(() => setStores([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const switchStore = async (tenantId) => {
+    setSwitching(true);
+    try {
+      const { data } = await api.post('/api/auth/switch-store', { tenantId });
+      // Troca só o token de acesso: a sessão de suporte (se houver) permanece
+      auth.replaceSession({ accessToken: data.accessToken, user: data.user });
+      window.location.assign('/dashboard');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Não foi possível trocar de loja.');
+      setSwitching(false);
+    }
+  };
 
   // Logos + validade da assinatura (para o lembrete de pagamento)
   useEffect(() => {
@@ -110,6 +134,28 @@ export default function Layout() {
             </>
           )}
         </div>
+
+        {/* Rede de lojas: alterna a filial ativa sem novo login */}
+        {stores.length > 1 && (
+          <div className="px-4 pt-4">
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+              🏬 Loja ativa
+            </label>
+            <select
+              value={stores.find((s) => s.isCurrent)?.id || ''}
+              disabled={switching}
+              onChange={(e) => switchStore(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 text-slate-100 text-sm rounded-lg px-3 py-2 disabled:opacity-50"
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id} disabled={!s.isActive}>
+                  {s.name}{!s.isActive ? ' (bloqueada)' : ''}
+                </option>
+              ))}
+            </select>
+            {switching && <p className="text-[11px] text-slate-400 mt-1">Trocando de loja…</p>}
+          </div>
+        )}
 
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {

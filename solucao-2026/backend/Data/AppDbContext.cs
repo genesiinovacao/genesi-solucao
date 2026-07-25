@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<PosTerminal> PosTerminals => Set<PosTerminal>();
     public DbSet<PlatformSettings> PlatformSettings => Set<PlatformSettings>();
     public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
+    public DbSet<TenantGroup> TenantGroups => Set<TenantGroup>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -56,6 +57,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
             e.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
+        });
+
+        b.Entity<TenantGroup>(e =>
+        {
+            e.ToTable("tenant_groups");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         });
 
         b.Entity<BillingCharge>(e =>
