@@ -318,6 +318,63 @@ function LogoPicker({ value, onChange, label }) {
   );
 }
 
+// Fica acima do formulário de cliente (z-60), que já está em z-50
+function NewGroupModal({ onCreate, onClose }) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      setError('Informe o nome da rede (mínimo 2 caracteres).');
+      return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      const created = await onCreate(trimmed);
+      onClose(created);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-[60]"
+         onClick={() => onClose(null)}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">🏬 Nova rede de lojas</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Agrupa filiais do mesmo dono. Cada loja mantém estoque, vendas e assinatura próprios.
+          </p>
+        </header>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Nome da rede *</label>
+            <input type="text" autoFocus required minLength={2} value={name}
+                   onChange={(e) => setName(e.target.value)}
+                   placeholder="Ex.: Grupo Silva"
+                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+          {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => onClose(null)}
+                    className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold">
+              {saving ? 'Criando…' : 'Criar rede'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
   // Novo cliente já nasce alinhado ao vencimento padrão: próximo dia 25
@@ -345,6 +402,7 @@ function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
 
   const set = (field) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -457,13 +515,7 @@ function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
                   <option key={g.id} value={g.id}>{g.name} ({g.storeCount} loja(s))</option>
                 ))}
               </select>
-              <button type="button"
-                      onClick={async () => {
-                        const name = prompt('Nome da rede (ex.: Grupo Silva):');
-                        if (!name?.trim()) return;
-                        const created = await onGroupCreated(name.trim());
-                        if (created) setForm((f) => ({ ...f, groupId: created.id }));
-                      }}
+              <button type="button" onClick={() => setGroupModalOpen(true)}
                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs whitespace-nowrap">
                 ＋ Nova rede
               </button>
@@ -472,6 +524,15 @@ function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
               Filiais do mesmo dono compartilham a rede: o funcionário alterna entre elas sem novo login.
               Estoque, vendas e assinatura continuam separados por loja.
             </p>
+            {groupModalOpen && (
+              <NewGroupModal
+                onCreate={onGroupCreated}
+                onClose={(created) => {
+                  setGroupModalOpen(false);
+                  if (created) setForm((f) => ({ ...f, groupId: created.id }));
+                }}
+              />
+            )}
           </div>
 
           <LogoPicker label="Logo do cliente (aparece no dashboard e no PDV dele)"
@@ -567,15 +628,11 @@ export default function Admin() {
     }
   };
 
+  // O erro sobe para o modal exibir inline — sem alert do navegador
   const createGroup = async (name) => {
-    try {
-      const { data } = await api.post('/api/admin/groups', { name });
-      setGroups((gs) => [...gs, data].sort((a, b) => a.name.localeCompare(b.name)));
-      return data;
-    } catch (err) {
-      alert(err.response?.data?.error || err.message);
-      return null;
-    }
+    const { data } = await api.post('/api/admin/groups', { name });
+    setGroups((gs) => [...gs, data].sort((a, b) => a.name.localeCompare(b.name)));
+    return data;
   };
 
   const saveGlobalLogo = async (value) => {
