@@ -26,7 +26,7 @@ public class SettingsController : ControllerBase
     // Espelha a régua do SubscriptionGateMiddleware: vencida além da carência
     private bool IsBlocked(DateOnly? expiresAt) =>
         expiresAt is { } exp &&
-        DateOnly.FromDateTime(DateTime.Now) >= exp.AddDays(_config.GetValue("Billing:GraceDays", 3) + 1);
+        Services.Billing.SubscriptionCycle.Today() >= exp.AddDays(_config.GetValue("Billing:GraceDays", 3) + 1);
 
     // The "tenants" table has no RLS (it's the control plane), so we
     // filter explicitly by the authenticated tenant_id every time.

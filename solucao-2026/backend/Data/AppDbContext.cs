@@ -64,6 +64,9 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Amount).HasColumnType("decimal(12,2)");
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            // Nomes explícitos: a convenção snake_case geraria pro_rata_days
+            e.Property(x => x.ProRataDays).HasColumnName("prorata_days");
+            e.Property(x => x.ProRataAmount).HasColumnName("prorata_amount").HasColumnType("decimal(12,2)");
             e.HasIndex(x => new { x.TenantId, x.CreatedAt });
         });
 

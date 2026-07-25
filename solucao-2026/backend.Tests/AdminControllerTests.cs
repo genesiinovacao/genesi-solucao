@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Solucao.Backend.Controllers;
@@ -24,11 +25,12 @@ public class AdminControllerTests
         }).Build();
         var tenantCtx = new TenantContext();
         tenantCtx.SetContext(Guid.Parse("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "superadmin");
-        return (new AdminController(db, new JwtService(config), tenantCtx, NullLogger<AdminController>.Instance), db);
+        return (new AdminController(db, new JwtService(config), tenantCtx,
+            new MemoryCache(new MemoryCacheOptions()), NullLogger<AdminController>.Instance), db);
     }
 
     private static CreateTenantRequest ValidCreate(string cnpj = "12.345.678/0001-90", string segment = "farmacia") =>
-        new("Farmácia Central", cnpj, segment, null, 2, null, "Ana Farm", "ana@farmacia.com", "123456");
+        new("Farmácia Central", cnpj, segment, null, 2, null, false, "Ana Farm", "ana@farmacia.com", "123456");
 
     [Theory]
     [InlineData("123")]
@@ -66,7 +68,7 @@ public class AdminControllerTests
         db.SaveChanges();
 
         var response = await controller.UpdateTenant(tenant.Id,
-            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, null, false, "premium"), default);
+            new UpdateTenantRequest("Loja X Renomeada", "loja_pecas", null, 5, null, false, false, "premium"), default);
 
         var dto = Assert.IsType<AdminTenantDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
         Assert.Equal("Loja X Renomeada", dto.Name);
@@ -112,9 +114,48 @@ public class AdminControllerTests
         db.SaveChanges();
 
         var response = await controller.RenewSubscription(tenant.Id,
-            new RenewSubscriptionRequest(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1))), default);
+            new RenewSubscriptionRequest(Solucao.Backend.Services.Billing.SubscriptionCycle.Today().AddDays(-1)), default);
 
         Assert.IsType<BadRequestObjectResult>(response.Result);
+    }
+
+    [Fact]
+    public async Task RenewAsBonus_MarksTenantAndRecordsZeroValueCharge()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Cortesia", Cnpj = "11222333000144" };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        var until = Solucao.Backend.Services.Billing.SubscriptionCycle.Today().AddMonths(2);
+        var response = await controller.RenewSubscription(tenant.Id,
+            new RenewSubscriptionRequest(until, IsBonus: true, Notes: "Cliente em implantação"), default);
+
+        var dto = Assert.IsType<AdminTenantDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
+        Assert.True(dto.SubscriptionIsBonus);
+        Assert.Equal(until, dto.SubscriptionExpiresAt);
+
+        var charge = Assert.Single(db.BillingCharges.Where(c => c.TenantId == tenant.Id));
+        Assert.Equal("bonus", charge.ChargeType);
+        Assert.Equal(0m, charge.Amount);
+        Assert.Equal("paid", charge.Status);
+        Assert.Equal(until, charge.AppliedNewExpiry);
+        Assert.Equal("Cliente em implantação", charge.Notes);
+    }
+
+    [Fact]
+    public async Task PaidRenew_DoesNotCreateBonusRecord()
+    {
+        var (controller, db) = Setup();
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Pagante", Cnpj = "11222333000144" };
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+
+        await controller.RenewSubscription(tenant.Id,
+            new RenewSubscriptionRequest(Solucao.Backend.Services.Billing.SubscriptionCycle.Today().AddMonths(1)), default);
+
+        Assert.Empty(db.BillingCharges.Where(c => c.TenantId == tenant.Id));
+        Assert.False(db.Tenants.Find(tenant.Id)!.SubscriptionIsBonus);
     }
 
     [Fact]

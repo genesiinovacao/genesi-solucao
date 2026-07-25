@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Solucao.Backend.Data;
 using Solucao.Backend.Models.Dtos.Admin;
 using Solucao.Backend.Services;
@@ -26,14 +27,50 @@ public class AdminController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly ITenantContext _tenant;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<AdminController> _log;
 
-    public AdminController(AppDbContext db, IJwtService jwt, ITenantContext tenant, ILogger<AdminController> log)
+    public AdminController(
+        AppDbContext db, IJwtService jwt, ITenantContext tenant,
+        IMemoryCache cache, ILogger<AdminController> log)
     {
         _db = db;
         _jwt = jwt;
         _tenant = tenant;
+        _cache = cache;
         _log = log;
+    }
+
+    private static AdminTenantDto ToDto(Models.Entities.Tenant t) => new(
+        t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
+        t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.SubscriptionIsBonus, t.CreatedAt);
+
+    /// <summary>
+    /// Registra no histórico financeiro um período concedido como cortesia.
+    /// Fica como linha de valor zero em billing_charges — o financeiro
+    /// distingue bonificação de assinatura paga sem precisar de outra tabela.
+    /// </summary>
+    private void RecordBonus(Models.Entities.Tenant t, DateOnly? previousExpiry, DateOnly newExpiry, string? notes)
+    {
+        var today = Services.Billing.SubscriptionCycle.Today();
+        _db.BillingCharges.Add(new Models.Entities.BillingCharge
+        {
+            Id = Guid.NewGuid(),
+            TenantId = t.Id,
+            ChargeType = "bonus",
+            PlanType = t.PlanType,
+            Months = 0,
+            Amount = 0m,
+            Provider = "bonus",
+            Status = "paid",
+            PeriodStart = previousExpiry is { } p && p > today ? p : today,
+            AppliedNewExpiry = newExpiry,
+            Notes = string.IsNullOrWhiteSpace(notes) ? "Bonificação concedida pelo administrador" : notes.Trim(),
+            PaidAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        _log.LogInformation("BONIFICAÇÃO: tenant {Name} ({Id}) com cortesia até {Expiry}", t.Name, t.Id, newExpiry);
     }
 
     [HttpGet("tenants")]
@@ -44,9 +81,22 @@ public class AdminController : ControllerBase
             .OrderBy(t => t.Name)
             .ToListAsync(ct);
 
-        return Ok(tenants.Select(t => new AdminTenantDto(
-            t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt)).ToList());
+        return Ok(tenants.Select(ToDto).ToList());
+    }
+
+    /// <summary>Histórico financeiro do cliente: cobranças pagas e bonificações.</summary>
+    [HttpGet("tenants/{id:guid}/charges")]
+    public async Task<ActionResult<List<TenantChargeDto>>> ListCharges(Guid id, CancellationToken ct)
+    {
+        var charges = await _db.BillingCharges.AsNoTracking()
+            .Where(c => c.TenantId == id)
+            .OrderByDescending(c => c.CreatedAt)
+            .Take(100)
+            .ToListAsync(ct);
+
+        return Ok(charges.Select(c => new TenantChargeDto(
+            c.Id, c.ChargeType, c.PlanType, c.Months, c.Amount, c.ProRataDays, c.ProRataAmount,
+            c.Status, c.Provider, c.PeriodStart, c.AppliedNewExpiry, c.Notes, c.CreatedAt, c.PaidAt)).ToList());
     }
 
     [HttpPost("tenants")]
@@ -90,14 +140,17 @@ public class AdminController : ControllerBase
         t.LogoBase64 = req.LogoBase64;
         t.MaxPosTerminals = req.MaxPosTerminals;
         t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
+        t.SubscriptionIsBonus = req.SubscriptionIsBonus && req.SubscriptionExpiresAt is not null;
+
+        if (t.SubscriptionIsBonus)
+            RecordBonus(t, null, req.SubscriptionExpiresAt!.Value, "Bonificação no cadastro do cliente");
+
         await _db.SaveChangesAsync(ct);
 
         _log.LogInformation("Admin criou tenant {Name} ({Id}), segmento {Segment}, {MaxPos} PDV(s)",
             t.Name, t.Id, t.Segment, t.MaxPosTerminals);
 
-        return Ok(new AdminTenantDto(
-            t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
+        return Ok(ToDto(t));
     }
 
     [HttpPut("tenants/{id:guid}")]
@@ -111,18 +164,26 @@ public class AdminController : ControllerBase
         var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t is null) return NotFound();
 
+        var previousExpiry = t.SubscriptionExpiresAt;
+        var wasBonus = t.SubscriptionIsBonus;
+
         t.Name = req.Name.Trim();
         t.Segment = req.Segment;
         t.LogoBase64 = req.LogoBase64;
         t.MaxPosTerminals = req.MaxPosTerminals;
         t.SubscriptionExpiresAt = req.SubscriptionExpiresAt;
+        t.SubscriptionIsBonus = req.SubscriptionIsBonus && req.SubscriptionExpiresAt is not null;
         t.IsActive = req.IsActive;
         t.PlanType = req.PlanType;
+
+        // Só registra quando a cortesia é nova ou o período mudou — salvar o
+        // cadastro sem mexer na assinatura não deve poluir o histórico.
+        if (t.SubscriptionIsBonus && (!wasBonus || previousExpiry != req.SubscriptionExpiresAt))
+            RecordBonus(t, previousExpiry, req.SubscriptionExpiresAt!.Value, "Bonificação definida na edição do cliente");
+
         await _db.SaveChangesAsync(ct);
 
-        return Ok(new AdminTenantDto(
-            t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
+        return Ok(ToDto(t));
     }
 
     /// <summary>
@@ -153,12 +214,15 @@ public class AdminController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Renova a assinatura definindo a nova data de expiração.</summary>
+    /// <summary>
+    /// Renovação manual (pagamento fora do PIX ou cortesia). Com IsBonus a
+    /// concessão entra no histórico como bonificação de valor zero.
+    /// </summary>
     [HttpPost("tenants/{id:guid}/renew")]
     public async Task<ActionResult<AdminTenantDto>> RenewSubscription(
         Guid id, [FromBody] RenewSubscriptionRequest req, CancellationToken ct)
     {
-        if (req.ExpiresAt < DateOnly.FromDateTime(DateTime.UtcNow))
+        if (req.ExpiresAt < Services.Billing.SubscriptionCycle.Today())
             return BadRequest(new { error = "A nova data de expiração não pode estar no passado." });
 
         var t = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -166,14 +230,18 @@ public class AdminController : ControllerBase
 
         var previous = t.SubscriptionExpiresAt;
         t.SubscriptionExpiresAt = req.ExpiresAt;
+        t.SubscriptionIsBonus = req.IsBonus;
+
+        if (req.IsBonus)
+            RecordBonus(t, previous, req.ExpiresAt, req.Notes);
+
         await _db.SaveChangesAsync(ct);
+        _cache.Remove($"sub-exp:{t.Id}"); // reflete na hora no gate de bloqueio
 
-        _log.LogInformation("Assinatura renovada: {Tenant} de {De} para {Ate}",
-            t.Name, previous?.ToString() ?? "—", req.ExpiresAt);
+        _log.LogInformation("Assinatura {Tipo}: {Tenant} de {De} para {Ate}",
+            req.IsBonus ? "bonificada" : "renovada", t.Name, previous?.ToString() ?? "—", req.ExpiresAt);
 
-        return Ok(new AdminTenantDto(
-            t.Id, t.Name, t.Cnpj, t.PlanType, t.Segment, t.IsActive,
-            t.MaxPosTerminals, t.LogoBase64, t.SubscriptionExpiresAt, t.CreatedAt));
+        return Ok(ToDto(t));
     }
 
     /// <summary>

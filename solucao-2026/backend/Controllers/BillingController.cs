@@ -11,9 +11,8 @@ namespace Solucao.Backend.Controllers;
 
 /// <summary>
 /// Renovação de assinatura via PIX, feita pelo próprio cliente (admin da
-/// loja). Fluxo: escolhe plano+período → cobra no provider → QR na tela →
-/// o front consulta o status; quando o provider confirma, a validade é
-/// estendida uma única vez (idempotente pelo status da cobrança).
+/// loja). Todo cliente vence no mesmo dia do mês (Billing:BillingDay); quem
+/// entra fora dessa data paga só a fração de dias até o próximo vencimento.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -52,19 +51,54 @@ public class BillingController : ControllerBase
     private decimal MonthlyPrice(string plan) =>
         _config.GetValue($"Billing:Plans:{plan}", DefaultPrices[plan]);
 
+    private int BillingDay => Math.Clamp(_config.GetValue("Billing:BillingDay", 25), 1, 28);
+
     public record PlanDto(string PlanType, decimal MonthlyPrice);
     public record CreateChargeRequest(string PlanType, int Months);
+    public record QuoteDto(
+        string PlanType, decimal MonthlyPrice, int BillingDay,
+        DateOnly PeriodStart, DateOnly NewExpiresAt,
+        int ProRataDays, decimal ProRataAmount,
+        int FullMonths, decimal FullAmount, decimal Total);
     public record ChargeDto(
-        Guid Id, string PlanType, int Months, decimal Amount, string QrCodeText,
-        string Status, string Provider, DateOnly? NewExpiresAt);
+        Guid Id, string PlanType, int Months, decimal Amount, string? QrCodeText,
+        string Status, string Provider, DateOnly? NewExpiresAt,
+        int ProRataDays, decimal ProRataAmount);
 
     private static ChargeDto ToDto(BillingCharge c) =>
-        new(c.Id, c.PlanType, c.Months, c.Amount, c.QrCodeText, c.Status, c.Provider, c.AppliedNewExpiry);
+        new(c.Id, c.PlanType, c.Months, c.Amount, c.QrCodeText, c.Status, c.Provider,
+            c.AppliedNewExpiry, c.ProRataDays, c.ProRataAmount);
 
     /// <summary>Tabela de preços por plano (mensal).</summary>
     [HttpGet("plans")]
     public ActionResult<List<PlanDto>> GetPlans() =>
         Ok(Plans.Select(p => new PlanDto(p, MonthlyPrice(p))).ToList());
+
+    /// <summary>
+    /// Simula a cobrança sem criar nada: o front mostra a decomposição
+    /// (dias proporcionais + meses cheios) antes de gerar o QR.
+    /// </summary>
+    [HttpGet("quote")]
+    public async Task<ActionResult<QuoteDto>> GetQuote(
+        [FromQuery] string planType, [FromQuery] int months, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return Unauthorized();
+        if (!Plans.Contains(planType))
+            return BadRequest(new { error = $"Plano inválido. Opções: {string.Join(", ", Plans)}" });
+        if (months is < 1 or > 12)
+            return BadRequest(new { error = "Período inválido: de 1 a 12 meses." });
+
+        var expiry = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId).Select(t => t.SubscriptionExpiresAt).FirstAsync(ct);
+
+        var price = MonthlyPrice(planType);
+        var q = SubscriptionCycle.BuildQuote(
+            SubscriptionCycle.Today(), expiry, price, months, BillingDay);
+
+        return Ok(new QuoteDto(
+            planType, price, BillingDay, q.PeriodStart, q.NewExpiresAt,
+            q.ProRataDays, q.ProRataAmount, q.FullMonths, q.FullAmount, q.Total));
+    }
 
     /// <summary>Cria a cobrança PIX e devolve o copia-e-cola para o QR.</summary>
     [HttpPost("charges")]
@@ -78,12 +112,14 @@ public class BillingController : ControllerBase
             return BadRequest(new { error = "Período inválido: de 1 a 12 meses." });
 
         var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == tenantId, ct);
-        var amount = decimal.Round(MonthlyPrice(req.PlanType) * req.Months, 2);
-        var chargeId = Guid.NewGuid();
+        var quote = SubscriptionCycle.BuildQuote(
+            SubscriptionCycle.Today(), tenant.SubscriptionExpiresAt,
+            MonthlyPrice(req.PlanType), req.Months, BillingDay);
 
+        var chargeId = Guid.NewGuid();
         var pix = await _pix.CreateChargeAsync(
-            amount,
-            $"SOLUCAO 2026 - Assinatura {req.PlanType} {req.Months} mes(es) - {tenant.Name}",
+            quote.Total,
+            $"SOLUCAO 2026 - Assinatura {req.PlanType} ate {quote.NewExpiresAt:dd/MM/yyyy} - {tenant.Name}",
             chargeId.ToString(),
             tenant.Email ?? "",
             ct);
@@ -92,28 +128,33 @@ public class BillingController : ControllerBase
         {
             Id = chargeId,
             TenantId = tenantId,
+            ChargeType = "subscription",
             PlanType = req.PlanType,
             Months = req.Months,
-            Amount = amount,
+            Amount = quote.Total,
             Provider = _pix.Name,
             ProviderChargeId = pix.ProviderChargeId,
             QrCodeText = pix.QrCodeText,
             Status = "pending",
+            PeriodStart = quote.PeriodStart,
+            ProRataDays = quote.ProRataDays,
+            ProRataAmount = quote.ProRataAmount,
             CreatedAt = DateTime.UtcNow,
         };
         _db.BillingCharges.Add(charge);
         await _db.SaveChangesAsync(ct);
 
-        _log.LogInformation("Cobrança PIX {ChargeId} criada: {Plan} x{Months} = R$ {Amount} (tenant {TenantId}, provider {Provider})",
-            chargeId, req.PlanType, req.Months, amount, tenantId, _pix.Name);
+        _log.LogInformation(
+            "Cobrança PIX {ChargeId}: {Plan} {Months}m + {Days}d pro-rata = R$ {Amount} até {Expiry} (tenant {TenantId})",
+            chargeId, req.PlanType, req.Months, quote.ProRataDays, quote.Total, quote.NewExpiresAt, tenantId);
 
         return Ok(ToDto(charge));
     }
 
     /// <summary>
-    /// Consulta o status. Na primeira confirmação de pagamento, aplica a
-    /// renovação: estende a validade a partir do maior entre hoje e a
-    /// validade atual, e troca o plano do cliente.
+    /// Consulta o status. Na primeira confirmação de pagamento aplica a
+    /// renovação: estende até o vencimento calculado, troca o plano e encerra
+    /// qualquer marcação de cortesia (agora é assinatura paga).
     /// </summary>
     [HttpGet("charges/{id:guid}")]
     public async Task<ActionResult<ChargeDto>> GetCharge(Guid id, CancellationToken ct)
@@ -121,12 +162,12 @@ public class BillingController : ControllerBase
         var charge = await _db.BillingCharges.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (charge is null) return NotFound();
 
-        if (charge.Status == "pending")
+        if (charge.Status == "pending" && charge.ProviderChargeId is { } providerId)
         {
             bool paid;
             try
             {
-                paid = await _pix.IsPaidAsync(charge.ProviderChargeId, ct);
+                paid = await _pix.IsPaidAsync(providerId, ct);
             }
             catch (Exception ex)
             {
@@ -137,24 +178,26 @@ public class BillingController : ControllerBase
             if (paid)
             {
                 var tenant = await _db.Tenants.FirstAsync(t => t.Id == charge.TenantId, ct);
-                var today = DateOnly.FromDateTime(DateTime.Now);
-                var baseDate = tenant.SubscriptionExpiresAt is { } cur && cur > today ? cur : today;
-                var newExpiry = baseDate.AddMonths(charge.Months);
+                // Recalcula no momento do pagamento: se o PIX demorou a cair, o
+                // período começa de onde a assinatura realmente está agora.
+                var quote = SubscriptionCycle.BuildQuote(
+                    SubscriptionCycle.Today(), tenant.SubscriptionExpiresAt,
+                    MonthlyPrice(charge.PlanType), charge.Months, BillingDay);
 
-                tenant.SubscriptionExpiresAt = newExpiry;
+                tenant.SubscriptionExpiresAt = quote.NewExpiresAt;
                 tenant.PlanType = charge.PlanType;
+                tenant.SubscriptionIsBonus = false;
 
                 charge.Status = "paid";
                 charge.PaidAt = DateTime.UtcNow;
-                charge.AppliedNewExpiry = newExpiry;
+                charge.AppliedNewExpiry = quote.NewExpiresAt;
                 await _db.SaveChangesAsync(ct);
 
-                // Desbloqueio imediato: derruba o cache do SubscriptionGate
-                _cache.Remove($"sub-exp:{charge.TenantId}");
+                _cache.Remove($"sub-exp:{charge.TenantId}"); // desbloqueio imediato
 
                 _log.LogInformation(
                     "PIX pago: cobrança {ChargeId}, tenant {TenantName} renovado até {NewExpiry} (plano {Plan})",
-                    charge.Id, tenant.Name, newExpiry, charge.PlanType);
+                    charge.Id, tenant.Name, quote.NewExpiresAt, charge.PlanType);
             }
         }
 

@@ -12,6 +12,7 @@ public record AdminTenantDto(
     int MaxPosTerminals,
     string? LogoBase64,
     DateOnly? SubscriptionExpiresAt,
+    bool SubscriptionIsBonus,
     DateTime CreatedAt);
 
 public record CreateTenantRequest(
@@ -21,6 +22,7 @@ public record CreateTenantRequest(
     string? LogoBase64,
     [Range(0, 100)] int MaxPosTerminals,
     DateOnly? SubscriptionExpiresAt,
+    bool SubscriptionIsBonus,
     [Required, MinLength(2), MaxLength(255)] string UserName,
     [Required, EmailAddress] string Email,
     [Required, MinLength(6)] string Password);
@@ -31,10 +33,29 @@ public record UpdateTenantRequest(
     string? LogoBase64,
     [Range(0, 100)] int MaxPosTerminals,
     DateOnly? SubscriptionExpiresAt,
+    bool SubscriptionIsBonus,
     bool IsActive,
     string PlanType);
 
-public record RenewSubscriptionRequest(DateOnly ExpiresAt);
+/// <summary>Renovação manual. IsBonus = cortesia (não gera receita).</summary>
+public record RenewSubscriptionRequest(DateOnly ExpiresAt, bool IsBonus = false, string? Notes = null);
+
+/// <summary>Linha do histórico financeiro do cliente (paga ou bonificada).</summary>
+public record TenantChargeDto(
+    Guid Id,
+    string ChargeType,
+    string PlanType,
+    int Months,
+    decimal Amount,
+    int ProRataDays,
+    decimal ProRataAmount,
+    string Status,
+    string Provider,
+    DateOnly? PeriodStart,
+    DateOnly? AppliedNewExpiry,
+    string? Notes,
+    DateTime CreatedAt,
+    DateTime? PaidAt);
 
 public record PlatformLogoDto(string? LogoBase64);
 

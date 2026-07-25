@@ -19,14 +19,109 @@ export const segmentLabel = (v) => SEGMENTS.find((s) => s.value === v)?.label ||
 
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
 
-function SubscriptionBadge({ expiresAt }) {
+function SubscriptionBadge({ expiresAt, isBonus }) {
   if (!expiresAt) return <span className="text-slate-400 text-xs">— sem controle</span>;
   const d = daysUntil(expiresAt);
+  // Cortesia: destaque roxo para o financeiro não confundir com receita
+  const bonusTag = isBonus && (
+    <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-purple-100 text-purple-700"
+          title="Período concedido como bonificação — não gerou receita">🎁 CORTESIA</span>
+  );
   if (d < 0)
-    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">⛔ Expirada em {fmtDate(expiresAt)}</span>;
+    return <span className="text-xs"><span className="px-2 py-0.5 font-semibold rounded-full bg-red-100 text-red-700">⛔ Expirada em {fmtDate(expiresAt)}</span>{bonusTag}</span>;
   if (d <= 3)
-    return <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">⚠️ Expira {d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`} ({fmtDate(expiresAt)})</span>;
-  return <span className="text-slate-600 text-xs">{fmtDate(expiresAt)}</span>;
+    return <span className="text-xs"><span className="px-2 py-0.5 font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">⚠️ Expira {d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`} ({fmtDate(expiresAt)})</span>{bonusTag}</span>;
+  return <span className="text-slate-600 text-xs">{fmtDate(expiresAt)}{bonusTag}</span>;
+}
+
+function ChargesModal({ tenant, onClose }) {
+  const [charges, setCharges] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get(`/api/admin/tenants/${tenant.id}/charges`)
+      .then(({ data }) => setCharges(data))
+      .catch((err) => setError(err.response?.data?.error || err.message));
+  }, [tenant.id]);
+
+  const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+  const paidTotal = (charges || [])
+    .filter((c) => c.chargeType === 'subscription' && c.status === 'paid')
+    .reduce((s, c) => s + c.amount, 0);
+  const bonusCount = (charges || []).filter((c) => c.chargeType === 'bonus').length;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">💰 Histórico financeiro</h2>
+          <p className="text-xs text-slate-500 mt-1">{tenant.name}</p>
+        </header>
+        <div className="p-6 flex-1 overflow-auto">
+          {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-3">⚠️ {error}</div>}
+          {!charges && !error && <p className="text-sm text-slate-500 text-center py-8">Carregando…</p>}
+          {charges?.length === 0 && (
+            <p className="text-sm text-slate-500 text-center py-8">
+              Nenhum lançamento ainda — nem pagamento, nem bonificação.
+            </p>
+          )}
+          {charges?.length > 0 && (
+            <>
+              <div className="flex gap-3 mb-4 text-sm">
+                <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  <p className="text-xs text-emerald-700">Recebido</p>
+                  <p className="text-lg font-bold text-emerald-800">{brl(paidTotal)}</p>
+                </div>
+                <div className="flex-1 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <p className="text-xs text-purple-700">Bonificações</p>
+                  <p className="text-lg font-bold text-purple-800">{bonusCount} período(s)</p>
+                </div>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2">Período</th>
+                    <th className="px-3 py-2 text-right">Valor</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {charges.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2">
+                        {c.chargeType === 'bonus'
+                          ? <span className="px-2 py-0.5 text-xs font-semibold rounded bg-purple-100 text-purple-700">🎁 Cortesia</span>
+                          : <span className="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-100 text-emerald-700 capitalize">💠 {c.planType}</span>}
+                        {c.notes && <p className="text-[11px] text-slate-400 mt-0.5">{c.notes}</p>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600">
+                        {c.periodStart ? fmtDate(c.periodStart) : '—'} → {c.appliedNewExpiry ? fmtDate(c.appliedNewExpiry) : '—'}
+                        {c.proRataDays > 0 && (
+                          <span className="block text-[11px] text-slate-400">
+                            inclui {c.proRataDays} dia(s) proporcionais ({brl(c.proRataAmount)})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-800">{brl(c.amount)}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {c.status === 'paid'
+                          ? <span className="text-emerald-600">Pago {c.paidAt ? new Date(c.paidAt).toLocaleDateString('pt-BR') : ''}</span>
+                          : <span className="text-slate-400">{c.status}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+        <footer className="p-4 border-t border-slate-200 flex justify-end">
+          <button onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Fechar</button>
+        </footer>
+      </div>
+    </div>
+  );
 }
 
 function RenewModal({ tenant, onClose, onSaved }) {
@@ -37,6 +132,8 @@ function RenewModal({ tenant, onClose, onSaved }) {
   suggested.setMonth(suggested.getMonth() + 1);
 
   const [date, setDate] = useState(suggested.toISOString().slice(0, 10));
+  const [isBonus, setIsBonus] = useState(false);
+  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,12 +143,22 @@ function RenewModal({ tenant, onClose, onSaved }) {
     setDate(d.toISOString().slice(0, 10));
   };
 
+  // Vencimento padrão de todos os clientes: dia 25
+  const nextBillingDay = () => {
+    const d = new Date(base);
+    d.setDate(25);
+    if (d <= base) d.setMonth(d.getMonth() + 1);
+    setDate(d.toISOString().slice(0, 10));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSaving(true);
     try {
-      await api.post(`/api/admin/tenants/${tenant.id}/renew`, { expiresAt: date });
+      await api.post(`/api/admin/tenants/${tenant.id}/renew`, {
+        expiresAt: date, isBonus, notes: notes.trim() || null,
+      });
       onSaved();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -76,11 +183,30 @@ function RenewModal({ tenant, onClose, onSaved }) {
                    min={new Date().toISOString().slice(0, 10)}
                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
           </div>
-          <div className="flex gap-2 text-xs">
+          <div className="flex flex-wrap gap-2 text-xs">
+            <button type="button" onClick={nextBillingDay} className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-medium">Próximo dia 25</button>
             <button type="button" onClick={() => addMonths(1)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+1 mês</button>
             <button type="button" onClick={() => addMonths(3)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+3 meses</button>
             <button type="button" onClick={() => addMonths(12)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg">+1 ano</button>
           </div>
+
+          <div className={`rounded-xl p-3 border ${isBonus ? 'bg-purple-50 border-purple-200' : 'border-slate-200'}`}>
+            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <input type="checkbox" checked={isBonus} onChange={(e) => setIsBonus(e.target.checked)} className="accent-purple-600" />
+              🎁 Bonificação (cortesia — não gera receita)
+            </label>
+            {isBonus && (
+              <>
+                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
+                       placeholder="Motivo (ex.: período de implantação, compensação)"
+                       className="w-full mt-2 px-3 py-2 border border-purple-300 rounded-lg text-sm" />
+                <p className="text-[11px] text-purple-700 mt-1">
+                  Fica registrado no histórico financeiro como cortesia de R$ 0,00.
+                </p>
+              </>
+            )}
+          </div>
+
           {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
@@ -193,20 +319,24 @@ function LogoPicker({ value, onChange, label }) {
 
 function TenantFormModal({ tenant, onClose, onSaved }) {
   const isEdit = !!tenant?.id;
+  // Novo cliente já nasce alinhado ao vencimento padrão: próximo dia 25
   const defaultExpiry = () => {
     const d = new Date();
-    d.setMonth(d.getMonth() + 1);
+    d.setDate(25);
+    if (d <= new Date()) d.setMonth(d.getMonth() + 1);
     return d.toISOString().slice(0, 10);
   };
   const [form, setForm] = useState(isEdit ? {
     name: tenant.name, cnpj: tenant.cnpj, segment: tenant.segment,
     logoBase64: tenant.logoBase64, maxPosTerminals: tenant.maxPosTerminals,
     subscriptionExpiresAt: tenant.subscriptionExpiresAt || '',
+    subscriptionIsBonus: tenant.subscriptionIsBonus || false,
     isActive: tenant.isActive, planType: tenant.planType,
     userName: '', email: '', password: '',
   } : {
     name: '', cnpj: '', segment: 'supermercado', logoBase64: null,
     maxPosTerminals: 1, subscriptionExpiresAt: defaultExpiry(),
+    subscriptionIsBonus: false,
     isActive: true, planType: 'standard',
     userName: '', email: '', password: '',
   });
@@ -228,6 +358,7 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
           name: form.name, segment: form.segment, logoBase64: form.logoBase64,
           maxPosTerminals: Number(form.maxPosTerminals),
           subscriptionExpiresAt: form.subscriptionExpiresAt || null,
+          subscriptionIsBonus: form.subscriptionIsBonus,
           isActive: form.isActive, planType: form.planType,
         });
       } else {
@@ -235,6 +366,7 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
           tenantName: form.name, cnpj: form.cnpj, segment: form.segment,
           logoBase64: form.logoBase64, maxPosTerminals: Number(form.maxPosTerminals),
           subscriptionExpiresAt: form.subscriptionExpiresAt || null,
+          subscriptionIsBonus: form.subscriptionIsBonus,
           userName: form.userName, email: form.email, password: form.password,
         });
       }
@@ -288,10 +420,22 @@ function TenantFormModal({ tenant, onClose, onSaved }) {
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Assinatura válida até</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {form.subscriptionIsBonus ? '🎁 Bonificação válida até' : 'Assinatura válida até'}
+              </label>
               <input type="date" value={form.subscriptionExpiresAt} onChange={set('subscriptionExpiresAt')}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              <p className="text-[11px] text-slate-400 mt-0.5">Vazio = sem controle de expiração. Alertas começam 3 dias antes.</p>
+                     className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                       form.subscriptionIsBonus ? 'border-purple-300 bg-purple-50' : 'border-slate-300'}`} />
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Vencimento padrão de todos os clientes: <strong>dia 25</strong>. Quem entra em outro dia
+                paga proporcional aos dias até o próximo dia 25. Vazio = sem controle.
+              </p>
+              <label className={`flex items-center gap-2 text-sm cursor-pointer mt-2 p-2 rounded-lg border ${
+                form.subscriptionIsBonus ? 'bg-purple-50 border-purple-200 text-purple-900' : 'border-slate-200 text-slate-700'}`}>
+                <input type="checkbox" checked={form.subscriptionIsBonus} onChange={set('subscriptionIsBonus')}
+                       className="accent-purple-600" />
+                🎁 Este período é bonificação (cortesia — não gera receita)
+              </label>
             </div>
           </div>
 
@@ -353,6 +497,7 @@ export default function Admin() {
   const [editing, setEditing] = useState(null); // null | 'new' | tenant
   const [renewing, setRenewing] = useState(null); // tenant sendo renovado
   const [deleting, setDeleting] = useState(null); // tenant sendo excluído
+  const [viewingCharges, setViewingCharges] = useState(null); // histórico financeiro
   const [globalLogo, setGlobalLogo] = useState(null);
   const [logoSaving, setLogoSaving] = useState(false);
 
@@ -450,7 +595,9 @@ export default function Admin() {
                 <td className="px-4 py-3 text-slate-600">{segmentLabel(t.segment)}</td>
                 <td className="px-4 py-3 text-slate-600 capitalize">{t.planType}</td>
                 <td className="px-4 py-3 text-right text-slate-700 font-semibold">{t.maxPosTerminals}</td>
-                <td className="px-4 py-3"><SubscriptionBadge expiresAt={t.subscriptionExpiresAt} /></td>
+                <td className="px-4 py-3">
+                  <SubscriptionBadge expiresAt={t.subscriptionExpiresAt} isBonus={t.subscriptionIsBonus} />
+                </td>
                 <td className="px-4 py-3">
                   {t.isActive
                     ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Ativo</span>
@@ -461,8 +608,10 @@ export default function Admin() {
                     <button onClick={() => impersonate(t)} title="Entrar no painel deste cliente como suporte"
                             className="text-emerald-600 hover:underline text-sm mr-3">Acessar</button>
                   )}
-                  <button onClick={() => setRenewing(t)} title="Renovar assinatura"
+                  <button onClick={() => setRenewing(t)} title="Renovar assinatura ou conceder bonificação"
                           className="text-indigo-600 hover:underline text-sm mr-3">Renovar</button>
+                  <button onClick={() => setViewingCharges(t)} title="Histórico financeiro (pagamentos e cortesias)"
+                          className="text-slate-600 hover:underline text-sm mr-3">Histórico</button>
                   <button onClick={() => setEditing(t)} className="text-blue-600 hover:underline text-sm mr-3">Editar</button>
                   <button onClick={() => setDeleting(t)} title="Excluir cliente e todos os dados"
                           className="text-red-500 hover:underline text-sm">Excluir</button>
@@ -495,6 +644,10 @@ export default function Admin() {
           onClose={() => setDeleting(null)}
           onDeleted={() => { setDeleting(null); load(); }}
         />
+      )}
+
+      {viewingCharges && (
+        <ChargesModal tenant={viewingCharges} onClose={() => setViewingCharges(null)} />
       )}
     </div>
   );

@@ -70,9 +70,9 @@ public class BillingControllerTests
     }
 
     [Fact]
-    public async Task PaidCharge_ExtendsExpiryFromFutureDate_AndChangesPlan()
+    public async Task PaidCharge_AlwaysLandsOnBillingDay_AndChangesPlan()
     {
-        var future = DateOnly.FromDateTime(DateTime.Now).AddDays(10);
+        var future = SubscriptionCycle.Today().AddDays(10);
         var (controller, db) = Setup(currentExpiry: future);
 
         var created = Assert.IsType<BillingController.ChargeDto>(
@@ -83,17 +83,19 @@ public class BillingControllerTests
             Assert.IsType<OkObjectResult>((await controller.GetCharge(created.Id, default)).Result).Value);
 
         Assert.Equal("paid", polled.Status);
-        Assert.Equal(future.AddMonths(3), polled.NewExpiresAt);
+        var expected = SubscriptionCycle.BuildQuote(SubscriptionCycle.Today(), future, 249.90m, 3, 25);
+        Assert.Equal(expected.NewExpiresAt, polled.NewExpiresAt);
+        Assert.Equal(25, polled.NewExpiresAt!.Value.Day);   // vencimento no dia fixo
 
         var tenant = db.Tenants.Find(TenantId)!;
-        Assert.Equal(future.AddMonths(3), tenant.SubscriptionExpiresAt);
+        Assert.Equal(expected.NewExpiresAt, tenant.SubscriptionExpiresAt);
         Assert.Equal("premium", tenant.PlanType);
     }
 
     [Fact]
     public async Task PaidCharge_ExpiredTenant_ExtendsFromToday()
     {
-        var past = DateOnly.FromDateTime(DateTime.Now).AddDays(-30);
+        var past = SubscriptionCycle.Today().AddDays(-30);
         var (controller, db) = Setup(currentExpiry: past);
 
         var created = Assert.IsType<BillingController.ChargeDto>(
@@ -101,8 +103,39 @@ public class BillingControllerTests
                 new BillingController.CreateChargeRequest("standard", 1), default)).Result).Value);
         await controller.GetCharge(created.Id, default);
 
-        var expected = DateOnly.FromDateTime(DateTime.Now).AddMonths(1);
-        Assert.Equal(expected, db.Tenants.Find(TenantId)!.SubscriptionExpiresAt);
+        var expected = SubscriptionCycle.BuildQuote(SubscriptionCycle.Today(), past, 149.90m, 1, 25);
+        Assert.Equal(expected.NewExpiresAt, db.Tenants.Find(TenantId)!.SubscriptionExpiresAt);
+        Assert.Equal(25, expected.NewExpiresAt.Day);
+    }
+
+    [Fact]
+    public async Task PaidCharge_ClearsBonusFlag()
+    {
+        var (controller, db) = Setup();
+        db.Tenants.Find(TenantId)!.SubscriptionIsBonus = true;
+        db.SaveChanges();
+
+        var created = Assert.IsType<BillingController.ChargeDto>(
+            Assert.IsType<OkObjectResult>((await controller.CreateCharge(
+                new BillingController.CreateChargeRequest("standard", 1), default)).Result).Value);
+        await controller.GetCharge(created.Id, default);
+
+        Assert.False(db.Tenants.Find(TenantId)!.SubscriptionIsBonus);
+    }
+
+    [Fact]
+    public async Task Quote_ShowsProRataBreakdownWithoutCreatingCharge()
+    {
+        var (controller, db) = Setup();
+
+        var response = await controller.GetQuote("standard", 1, default);
+        var quote = Assert.IsType<BillingController.QuoteDto>(
+            Assert.IsType<OkObjectResult>(response.Result).Value);
+
+        Assert.Equal(25, quote.BillingDay);
+        Assert.Equal(25, quote.NewExpiresAt.Day);
+        Assert.Equal(quote.ProRataAmount + quote.FullAmount, quote.Total);
+        Assert.Empty(db.BillingCharges);   // consulta não grava nada
     }
 
     [Fact]

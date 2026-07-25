@@ -50,7 +50,7 @@ public sealed class SubscriptionGateMiddleware
         {
             var graceDays = config.GetValue("Billing:GraceDays", 3);
             var blockedFrom = exp.AddDays(graceDays + 1);
-            if (DateOnly.FromDateTime(DateTime.Now) >= blockedFrom)
+            if (Services.Billing.SubscriptionCycle.Today() >= blockedFrom)
             {
                 _log.LogInformation("Tenant {TenantId} bloqueado por assinatura vencida em {Exp}", tenantId, exp);
                 ctx.Response.StatusCode = StatusCodes.Status402PaymentRequired;

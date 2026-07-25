@@ -23,6 +23,7 @@ export default function RenewSubscription({ currentPlan, onClose, onRenewed }) {
   const [plans, setPlans] = useState([]);
   const [plan, setPlan] = useState(currentPlan || 'standard');
   const [months, setMonths] = useState(1);
+  const [quote, setQuote] = useState(null);   // decomposição vinda do backend
   const [charge, setCharge] = useState(null); // cobrança criada (fase QR)
   const [paid, setPaid] = useState(null);     // {newExpiresAt}
   const [creating, setCreating] = useState(false);
@@ -35,6 +36,18 @@ export default function RenewSubscription({ currentPlan, onClose, onRenewed }) {
       .then(({ data }) => setPlans(data))
       .catch((err) => setError(err.response?.data?.error || err.message));
   }, []);
+
+  // O valor é calculado no servidor: o pro-rata depende do dia de vencimento
+  // e do ciclo real do mês, não pode ser reproduzido no front.
+  useEffect(() => {
+    if (charge) return;
+    let cancelled = false;
+    setQuote(null);
+    api.get('/api/billing/quote', { params: { planType: plan, months } })
+      .then(({ data }) => { if (!cancelled) setQuote(data); })
+      .catch((err) => { if (!cancelled) setError(err.response?.data?.error || err.message); });
+    return () => { cancelled = true; };
+  }, [plan, months, charge]);
 
   // Desenha o QR quando a cobrança existe
   useEffect(() => {
@@ -59,8 +72,7 @@ export default function RenewSubscription({ currentPlan, onClose, onRenewed }) {
     return () => clearInterval(t);
   }, [charge, paid]);
 
-  const price = plans.find((p) => p.planType === plan)?.monthlyPrice ?? 0;
-  const total = price * months;
+  const fmtDate = (iso) => (iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR') : '—');
 
   const createCharge = async () => {
     setError('');
@@ -163,14 +175,38 @@ export default function RenewSubscription({ currentPlan, onClose, onRenewed }) {
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between bg-slate-50 rounded-xl p-4">
-              <span className="text-sm text-slate-600">Total</span>
-              <span className="text-2xl font-extrabold text-slate-800">{brl(total)}</span>
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              {quote?.proRataDays > 0 && (
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>Período proporcional ({quote.proRataDays} dia{quote.proRataDays > 1 ? 's' : ''})</span>
+                  <span>{brl(quote.proRataAmount)}</span>
+                </div>
+              )}
+              {quote && (
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>{quote.fullMonths} mês(es) de assinatura</span>
+                  <span>{brl(quote.fullAmount)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                <span className="text-sm text-slate-600">Total</span>
+                <span className="text-2xl font-extrabold text-slate-800">
+                  {quote ? brl(quote.total) : '…'}
+                </span>
+              </div>
+              {quote && (
+                <p className="text-[11px] text-slate-500 pt-1">
+                  {quote.proRataDays > 0
+                    ? `Você paga apenas os ${quote.proRataDays} dia(s) até o próximo vencimento (dia ${quote.billingDay}) e mais ${quote.fullMonths} mês(es). `
+                    : ''}
+                  Válida até <strong>{fmtDate(quote.newExpiresAt)}</strong> — todo dia {quote.billingDay} é a data de pagamento.
+                </p>
+              )}
             </div>
             {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
-              <button type="button" onClick={createCharge} disabled={creating || plans.length === 0}
+              <button type="button" onClick={createCharge} disabled={creating || !quote}
                       className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold">
                 {creating ? 'Gerando PIX…' : 'Gerar QR Code PIX'}
               </button>

@@ -17,6 +17,8 @@ public class Tenant
     public string Segment { get; set; } = "supermercado";
     public int MaxPosTerminals { get; set; } = 1;
     public DateOnly? SubscriptionExpiresAt { get; set; }
+    /// <summary>Período atual é cortesia (não gerou receita) — marcado pelo superadmin.</summary>
+    public bool SubscriptionIsBonus { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
