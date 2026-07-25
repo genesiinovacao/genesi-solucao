@@ -26,7 +26,8 @@ public class AdminControllerTests
         var tenantCtx = new TenantContext();
         tenantCtx.SetContext(Guid.Parse("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "superadmin");
         return (new AdminController(db, new JwtService(config), tenantCtx,
-            new MemoryCache(new MemoryCacheOptions()), NullLogger<AdminController>.Instance), db);
+            new MemoryCache(new MemoryCacheOptions()), new FakeAudit(),
+            NullLogger<AdminController>.Instance), db);
     }
 
     private static CreateTenantRequest ValidCreate(string cnpj = "12.345.678/0001-90", string segment = "farmacia") =>

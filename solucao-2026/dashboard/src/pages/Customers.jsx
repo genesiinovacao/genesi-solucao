@@ -99,6 +99,39 @@ export default function Customers() {
     }
   };
 
+  // LGPD art. 18: o titular pode pedir cópia dos seus dados…
+  const exportData = async (c) => {
+    try {
+      const { data } = await api.get(`/api/customers/${c.id}/personal-data`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dados-pessoais-${c.name.replace(/[^\w]+/g, '-').toLowerCase()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
+  // …e a eliminação. As compras ficam (guarda fiscal), sem dono identificável.
+  const anonymize = async (c) => {
+    const ok = confirm(
+      `Eliminar os dados pessoais de "${c.name}"?\n\n` +
+      'Nome, CPF, e-mail, telefone, endereço e data de nascimento são apagados de forma irreversível.\n' +
+      'As compras são mantidas (obrigação fiscal), mas deixam de identificar a pessoa.\n\n' +
+      'Use quando o titular solicitar formalmente a exclusão dos dados (LGPD art. 18, VI).'
+    );
+    if (!ok) return;
+    try {
+      await api.post(`/api/customers/${c.id}/anonymize`);
+      await load();
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <header className="mb-6 flex items-center justify-between">
@@ -188,11 +221,23 @@ export default function Customers() {
                   <td className="px-4 py-3">
                     {c.status === 'active'
                       ? <span className="text-xs text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Ativo</span>
+                      : c.status === 'anonymized'
+                      ? <span className="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full"
+                              title="Dados pessoais eliminados a pedido do titular (LGPD)">🔒 Anonimizado</span>
                       : <span className="text-xs text-slate-700 bg-slate-200 px-2 py-0.5 rounded-full">Inativo</span>}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline text-sm mr-3">✏️</button>
-                    <button onClick={() => remove(c)} className="text-red-600 hover:underline text-sm">🗑️</button>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {c.status !== 'anonymized' && (
+                      <>
+                        <button onClick={() => openEdit(c)} title="Editar"
+                                className="text-blue-600 hover:underline text-sm mr-3">✏️</button>
+                        <button onClick={() => exportData(c)} title="Exportar dados pessoais (pedido do titular — LGPD)"
+                                className="text-slate-500 hover:underline text-sm mr-3">📄</button>
+                        <button onClick={() => anonymize(c)} title="Eliminar dados pessoais a pedido do titular (LGPD)"
+                                className="text-purple-600 hover:underline text-sm mr-3">🔒</button>
+                        <button onClick={() => remove(c)} title="Inativar" className="text-red-600 hover:underline text-sm">🗑️</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

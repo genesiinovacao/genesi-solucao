@@ -28,16 +28,18 @@ public class AdminController : ControllerBase
     private readonly IJwtService _jwt;
     private readonly ITenantContext _tenant;
     private readonly IMemoryCache _cache;
+    private readonly IAuditService _audit;
     private readonly ILogger<AdminController> _log;
 
     public AdminController(
         AppDbContext db, IJwtService jwt, ITenantContext tenant,
-        IMemoryCache cache, ILogger<AdminController> log)
+        IMemoryCache cache, IAuditService audit, ILogger<AdminController> log)
     {
         _db = db;
         _jwt = jwt;
         _tenant = tenant;
         _cache = cache;
+        _audit = audit;
         _log = log;
     }
 
@@ -206,6 +208,10 @@ public class AdminController : ControllerBase
         if (!string.Equals(confirm?.Trim(), t.Name, StringComparison.Ordinal))
             return BadRequest(new { error = "Confirmação incorreta: digite o nome exato do cliente." });
 
+        // Auditoria antes do cascade: depois da remoção o vínculo não existe mais
+        _audit.Log("admin.tenant_delete", "tenant", t.Id, new { tenantName = t.Name, cnpj = t.Cnpj });
+        await _db.SaveChangesAsync(ct);
+
         _db.Tenants.Remove(t);
         await _db.SaveChangesAsync(ct);
 
@@ -269,6 +275,10 @@ public class AdminController : ControllerBase
                 PasswordHash = ""
             },
             t.Name);
+
+        // Acesso do suporte aos dados de um cliente: registro obrigatório
+        _audit.Log("admin.impersonate", "tenant", t.Id, new { tenantName = t.Name });
+        await _db.SaveChangesAsync(ct);
 
         _log.LogWarning("IMPERSONATION: superadmin {UserId} acessou o tenant {TenantName} ({TenantId})",
             superadminId, t.Name, t.Id);

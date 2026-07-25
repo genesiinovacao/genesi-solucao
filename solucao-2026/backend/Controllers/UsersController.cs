@@ -22,12 +22,14 @@ public class UsersController : ControllerBase
 
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IAuditService _audit;
     private readonly ILogger<UsersController> _log;
 
-    public UsersController(AppDbContext db, ITenantContext tenant, ILogger<UsersController> log)
+    public UsersController(AppDbContext db, ITenantContext tenant, IAuditService audit, ILogger<UsersController> log)
     {
         _db = db;
         _tenant = tenant;
+        _audit = audit;
         _log = log;
     }
 
@@ -79,6 +81,7 @@ public class UsersController : ControllerBase
             UpdatedAt = DateTime.UtcNow,
         };
         _db.Users.Add(user);
+        _audit.Log("user.create", "user", user.Id, new { role = user.Role });
         await _db.SaveChangesAsync(ct);
 
         _log.LogInformation("Usuário {Email} ({Role}) criado no tenant {TenantId}", user.Email, user.Role, tenantId);
@@ -114,6 +117,8 @@ public class UsersController : ControllerBase
         u.IsActive = req.IsActive;
         u.UpdatedAt = DateTime.UtcNow;
 
+        _audit.Log("user.update", "user", u.Id, new { role = u.Role, active = u.IsActive });
+
         if (deactivated)
         {
             var tokens = await _db.RefreshTokens
@@ -144,6 +149,7 @@ public class UsersController : ControllerBase
             .Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync(ct);
         tokens.ForEach(t => t.RevokedAt = DateTime.UtcNow);
 
+        _audit.Log("user.password_reset", "user", u.Id, new { sessionsRevoked = tokens.Count });
         await _db.SaveChangesAsync(ct);
         _log.LogInformation("Senha redefinida para {Email}; {N} sessão(ões) revogada(s)", u.Email, tokens.Count);
         return Ok(ToDto(u));

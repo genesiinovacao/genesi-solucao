@@ -27,7 +27,7 @@ public class UsersControllerTests
         });
         db.SaveChanges();
 
-        return (new UsersController(db, tenantCtx, NullLogger<UsersController>.Instance), db);
+        return (new UsersController(db, tenantCtx, new FakeAudit(), NullLogger<UsersController>.Instance), db);
     }
 
     private static User AddUser(Data.AppDbContext db, string role = "cashier", bool active = true)

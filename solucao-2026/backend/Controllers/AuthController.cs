@@ -85,6 +85,15 @@ public class AuthController : ControllerBase
                 INSERT INTO refresh_tokens (user_id, tenant_id, token_hash, expires_at)
                 VALUES ({user.UserId}, {user.TenantId}, {_jwt.HashRefreshToken(refreshRaw)}, {DateTime.UtcNow.AddDays(refreshDays)})", ct);
 
+            // Registro de acesso (LGPD art. 37). Vai por SQL dentro desta
+            // transação porque no login o ITenantContext ainda está vazio —
+            // é o set_config acima que satisfaz a policy de RLS do audit_log.
+            var ip = RemoteIp();
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO audit_log (tenant_id, user_id, action, entity_type, entity_id, metadata, ip_address)
+                VALUES ({user.TenantId}, {user.UserId}, 'auth.login', 'user', {user.UserId},
+                        {$"{{\"role\":\"{user.Role}\"}}"}::jsonb, {ip}::inet)", ct);
+
             await tx.CommitAsync(ct);
         }
 
@@ -187,6 +196,18 @@ public class AuthController : ControllerBase
             .FirstOrDefaultAsync(ct) ?? "";
 
         return Ok(new UserDto(u.Id, u.TenantId, tenantName, u.Name, u.Email, u.Role));
+    }
+
+    /// <summary>IP de origem — atrás do proxy vem no X-Forwarded-For.</summary>
+    private string? RemoteIp()
+    {
+        var forwarded = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwarded))
+        {
+            var first = forwarded.Split(',')[0].Trim();
+            if (System.Net.IPAddress.TryParse(first, out var parsed)) return parsed.ToString();
+        }
+        return HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
     // Internal projection records (must have parameterless ctor or matching property names)

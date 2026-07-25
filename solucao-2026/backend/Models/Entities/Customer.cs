@@ -15,6 +15,8 @@ public class Customer
     public string Status { get; set; } = "active";
     public DateOnly? BirthDate { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Quando o titular pediu a eliminação dos dados (LGPD art. 18, VI).</summary>
+    public DateTime? AnonymizedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

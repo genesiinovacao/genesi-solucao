@@ -24,6 +24,7 @@ builder.Host.UseSerilog((ctx, cfg) => cfg
 // ---------------------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<IAuditService, AuditService>();   // LGPD art. 37
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddScoped<TenantConnectionInterceptor>();
 
