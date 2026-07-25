@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { daysUntil } from '../lib/dates';
@@ -318,7 +319,12 @@ function LogoPicker({ value, onChange, label }) {
   );
 }
 
-// Fica acima do formulário de cliente (z-60), que já está em z-50
+/**
+ * Fica acima do formulário de cliente (z-60), que já está em z-50.
+ * Renderizado via portal no body: dentro do <form> do cliente o navegador
+ * descartaria este <form> (HTML não aceita form aninhado) e o botão "Criar
+ * rede" acabaria submetendo o cadastro do cliente.
+ */
 function NewGroupModal({ onCreate, onClose }) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -342,7 +348,7 @@ function NewGroupModal({ onCreate, onClose }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-[60]"
          onClick={() => onClose(null)}>
       <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
@@ -371,7 +377,8 @@ function NewGroupModal({ onCreate, onClose }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
