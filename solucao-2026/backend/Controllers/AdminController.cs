@@ -274,7 +274,8 @@ public class AdminController : ControllerBase
                 Role = "admin",
                 PasswordHash = ""
             },
-            t.Name);
+            t.Name,
+            impersonated: true);   // isenta o suporte do bloqueio por assinatura
 
         // Acesso do suporte aos dados de um cliente: registro obrigatório
         _audit.Log("admin.impersonate", "tenant", t.Id, new { tenantName = t.Name });

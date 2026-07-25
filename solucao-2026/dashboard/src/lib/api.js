@@ -21,6 +21,13 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    // 402 = assinatura vencida. Numa sessão de suporte isso não deveria
+    // acontecer (o backend isenta a impersonação); se acontecer com um token
+    // antigo, devolve o superadmin ao painel em vez de prendê-lo na tela.
+    if (err.response?.status === 402 && auth.isImpersonating()) {
+      auth.exitImpersonation();
+      window.location.assign('/admin');
+    }
     return Promise.reject(err);
   }
 );

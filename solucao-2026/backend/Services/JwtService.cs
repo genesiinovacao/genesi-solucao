@@ -29,21 +29,25 @@ public sealed class JwtService : IJwtService
             throw new InvalidOperationException("Jwt:Key must be at least 32 bytes (256 bits).");
     }
 
-    public (string token, DateTime expiresAt) GenerateAccessToken(User user, string tenantName)
+    public const string ImpersonationClaim = "imp";
+
+    public (string token, DateTime expiresAt) GenerateAccessToken(User user, string tenantName, bool impersonated = false)
     {
         var now = DateTime.UtcNow;
         var expiresAt = now.AddMinutes(_opts.AccessTokenMinutes);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role),
-            new Claim("name", user.Name),
-            new Claim(TenantIdClaim, user.TenantId.ToString()),
-            new Claim(TenantNameClaim, tenantName),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new(ClaimTypes.Role, user.Role),
+            new("name", user.Name),
+            new(TenantIdClaim, user.TenantId.ToString()),
+            new(TenantNameClaim, tenantName),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (impersonated) claims.Add(new Claim(ImpersonationClaim, "1"));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opts.Key));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

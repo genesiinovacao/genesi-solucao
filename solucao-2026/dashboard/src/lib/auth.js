@@ -35,7 +35,12 @@ export const auth = {
   isImpersonating: () => !!localStorage.getItem(KEY_SA_ACCESS),
 
   enterImpersonation: ({ accessToken, user }) => {
-    localStorage.setItem(KEY_SA_ACCESS, localStorage.getItem(KEY_ACCESS) || '');
+    const saAccess = localStorage.getItem(KEY_ACCESS);
+    // Sem o token do superadmin não há como voltar: aborta em vez de gravar
+    // string vazia (isImpersonating ficaria false e prenderia a sessão).
+    if (!saAccess) throw new Error('Sessão do superadmin não encontrada — faça login novamente.');
+
+    localStorage.setItem(KEY_SA_ACCESS, saAccess);
     localStorage.setItem(KEY_SA_REFRESH, localStorage.getItem(KEY_REFRESH) || '');
     localStorage.setItem(KEY_SA_USER, localStorage.getItem(KEY_USER) || '');
     localStorage.setItem(KEY_ACCESS, accessToken);

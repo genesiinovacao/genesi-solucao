@@ -188,7 +188,7 @@ export default function Layout() {
           </div>
         )}
         <div className="flex-1 overflow-auto">
-          {!isSuper && branding?.subscriptionBlocked ? (
+          {!isSuper && branding?.subscriptionBlocked && !impersonating ? (
             <div className="h-full flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-4">
                 <div className="text-6xl">🔒</div>
@@ -207,6 +207,18 @@ export default function Layout() {
                 ) : (
                   <p className="text-xs text-slate-400">Peça ao administrador da loja para renovar a assinatura.</p>
                 )}
+                {/* Saída de emergência: nenhuma tela pode prender o usuário */}
+                <div className="pt-2">
+                  {impersonating ? (
+                    <button onClick={exitImpersonation} className="text-xs text-slate-500 hover:text-slate-800 underline">
+                      ← Voltar ao painel administrativo
+                    </button>
+                  ) : (
+                    <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-slate-700 underline">
+                      Sair da conta
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

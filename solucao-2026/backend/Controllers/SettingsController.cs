@@ -23,8 +23,11 @@ public class SettingsController : ControllerBase
         _config = config;
     }
 
-    // Espelha a régua do SubscriptionGateMiddleware: vencida além da carência
+    // Espelha a régua do SubscriptionGateMiddleware: vencida além da carência.
+    // Sessão de suporte (impersonação) nunca é bloqueada, senão o superadmin
+    // ficaria preso na tela de bloqueio do cliente.
     private bool IsBlocked(DateOnly? expiresAt) =>
+        User.FindFirst(JwtService.ImpersonationClaim)?.Value != "1" &&
         expiresAt is { } exp &&
         Services.Billing.SubscriptionCycle.Today() >= exp.AddDays(_config.GetValue("Billing:GraceDays", 3) + 1);
 

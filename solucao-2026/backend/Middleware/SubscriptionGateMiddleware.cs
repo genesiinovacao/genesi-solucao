@@ -71,6 +71,10 @@ public sealed class SubscriptionGateMiddleware
         if (tenant.TenantId is null) return false;              // não autenticado
         if (tenant.Role == "superadmin") return false;          // gestor da plataforma
 
+        // Acesso de suporte: o superadmin precisa entrar justamente quando a
+        // assinatura venceu (para conferir dados, renovar ou bonificar).
+        if (ctx.User.FindFirst(JwtService.ImpersonationClaim)?.Value == "1") return false;
+
         var path = ctx.Request.Path;
         if (!path.StartsWithSegments("/api")) return false;     // hubs, health, swagger
         if (path.StartsWithSegments("/api/auth")) return false;
