@@ -38,6 +38,7 @@ services:
       - ./database/14_lgpd.sql:/docker-entrypoint-initdb.d/14_lgpd.sql:ro
       - ./database/15_tenant_groups.sql:/docker-entrypoint-initdb.d/15_tenant_groups.sql:ro
       - ./database/16_operator_pin.sql:/docker-entrypoint-initdb.d/16_operator_pin.sql:ro
+      - ./database/17_discount_default.sql:/docker-entrypoint-initdb.d/17_discount_default.sql:ro
       # 03_seed.sql (tenants demo) fica de fora em produção de propósito
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U solucao_admin -d solucao"]

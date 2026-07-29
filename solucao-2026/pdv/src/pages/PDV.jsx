@@ -144,7 +144,9 @@ export default function PDV() {
 
     setOperatorModal({
       mode: 'authorize',
-      action: `desconto de ${pct}% (limite da loja: ${maxDiscount}%)`,
+      action: maxDiscount === 0
+        ? `desconto de ${pct}% (o caixa não tem alçada para desconto)`
+        : `desconto de ${pct}% (limite da loja: ${maxDiscount}%)`,
       value: pct,
       onDone: (result) => {
         setDiscountPct(raw);
@@ -651,7 +653,10 @@ export default function PDV() {
             </div>
           )}
           <div className="flex justify-between items-center text-sm">
-            <label className="text-slate-400">Desconto (%)</label>
+            <label className="text-slate-400">
+              Desconto (%)
+              {maxDiscount === 0 && <span className="text-amber-500 text-xs ml-1" title="Todo desconto exige gerente">🔒</span>}
+            </label>
             <input type="number" min="0" max="100" step="0.5" value={discountPct}
                    onChange={(e) => onDiscountChange(e.target.value)}
                    className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-mono" />

@@ -141,6 +141,7 @@ export default function Settings() {
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               <p className="text-xs text-slate-400 mt-1">
                 No PDV, desconto acima disso pede código e PIN de um gerente.
+                <strong> Zero (recomendado) = o caixa não dá desconto sozinho.</strong>
               </p>
             </div>
             <div>

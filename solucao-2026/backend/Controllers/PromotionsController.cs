@@ -56,12 +56,50 @@ public class PromotionsController : ControllerBase
             (int)Math.Ceiling(total / (double)pageSize)));
     }
 
+    /// <summary>
+    /// Alvo tem de casar com o tipo, senão a promoção existe e nunca pega
+    /// nada: produto precisa existir, categoria precisa estar em uso e o
+    /// nível de fidelidade tem valores fixos.
+    /// </summary>
+    private async Task<string?> ValidateTargetAsync(string targetType, string? targetValue, CancellationToken ct)
+    {
+        switch (targetType)
+        {
+            case "total":
+                return null;   // não usa alvo
+
+            case "product":
+                if (!Guid.TryParse(targetValue, out var productId))
+                    return "Selecione um produto válido.";
+                if (!await _db.Products.AnyAsync(p => p.Id == productId, ct))
+                    return "Produto não encontrado nesta loja.";
+                return null;
+
+            case "category":
+                if (string.IsNullOrWhiteSpace(targetValue))
+                    return "Selecione a categoria.";
+                var exists = await _db.Products
+                    .AnyAsync(p => p.Category != null && p.Category.ToLower() == targetValue.Trim().ToLower(), ct);
+                return exists ? null : $"Nenhum produto na categoria \"{targetValue}\" — a promoção não pegaria nada.";
+
+            case "loyalty":
+                return targetValue is "bronze" or "silver" or "gold"
+                    ? null
+                    : "Nível de fidelidade deve ser bronze, silver ou gold.";
+
+            default:
+                return "Tipo de alvo inválido.";
+        }
+    }
+
     [Authorize(Roles = "admin,manager")]
     [HttpPost]
     public async Task<ActionResult<PromotionDto>> Create([FromBody] CreatePromotionRequest req, CancellationToken ct)
     {
         if (_tenant.TenantId is not { } tenantId) return Unauthorized();
         if (req.EndsAt < req.StartsAt) return BadRequest(new { error = "Data fim deve ser após o início." });
+        if (await ValidateTargetAsync(req.TargetType, req.TargetValue, ct) is { } targetError)
+            return BadRequest(new { error = targetError });
 
         var p = new Promotion
         {
@@ -86,6 +124,8 @@ public class PromotionsController : ControllerBase
         var p = await _db.Promotions.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return NotFound();
         if (req.EndsAt < req.StartsAt) return BadRequest(new { error = "Data fim deve ser após o início." });
+        if (await ValidateTargetAsync(req.TargetType, req.TargetValue, ct) is { } targetError)
+            return BadRequest(new { error = targetError });
 
         p.Name = req.Name;
         p.DiscountPercent = req.DiscountPercent;

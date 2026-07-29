@@ -17,6 +17,36 @@ export default function Promotions() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  // Opções de alvo: escolher da lista evita promoção que não pega nada
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productSearch, setProductSearch] = useState('');
+
+  useEffect(() => {
+    api.get('/api/products/categories').then(({ data }) => setCategories(data)).catch(() => setCategories([]));
+    api.get('/api/products', { params: { pageSize: 500 } })
+      .then(({ data }) => setProducts(data.items || [])).catch(() => setProducts([]));
+  }, []);
+
+  const filteredProducts = products.filter((p) => {
+    const q = productSearch.trim().toLowerCase();
+    if (!q) return true;
+    return p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q)
+        || (p.barcode || '').includes(q);
+  });
+
+  const selectedProduct = products.find((p) => p.id === form.targetValue);
+
+  const loyaltyLabels = { bronze: '🥉 Bronze', silver: '🥈 Prata', gold: '🥇 Ouro' };
+
+  /** Alvo legível: produto vem gravado como id, não como nome. */
+  const describeTarget = (p) => {
+    if (p.targetType === 'product') {
+      return products.find((x) => x.id === p.targetValue)?.name || 'produto removido';
+    }
+    if (p.targetType === 'loyalty') return loyaltyLabels[p.targetValue] || p.targetValue;
+    return p.targetValue;
+  };
 
   const load = async () => {
     setLoading(true);
@@ -116,7 +146,7 @@ export default function Promotions() {
               {active && <span className="absolute top-0 right-0 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">ATIVA</span>}
               <h3 className="font-bold text-slate-800 text-lg mb-1 pr-16">{p.name}</h3>
               <p className="text-xs text-slate-500 mb-3">
-                {targetLabels[p.targetType] || p.targetType}{p.targetValue ? ` · ${p.targetValue}` : ''}
+                {targetLabels[p.targetType] || p.targetType}{p.targetValue ? ` · ${describeTarget(p)}` : ''}
               </p>
               <div className="text-3xl font-extrabold text-blue-600 mb-2">{p.discountPercent}%<span className="text-base font-medium text-slate-500"> OFF</span></div>
               <p className="text-xs text-slate-500 mb-4">
@@ -169,7 +199,9 @@ export default function Promotions() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo *</label>
-                    <select value={form.targetType} onChange={(e) => setForm({ ...form, targetType: e.target.value })}
+                    {/* Trocar o tipo limpa o alvo: um id de produto não serve como categoria */}
+                    <select value={form.targetType}
+                            onChange={(e) => setForm({ ...form, targetType: e.target.value, targetValue: '' })}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                       <option value="product">Produto</option>
                       <option value="category">Categoria</option>
@@ -179,10 +211,64 @@ export default function Promotions() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Alvo</label>
-                  <input type="text" value={form.targetValue} onChange={(e) => setForm({ ...form, targetValue: e.target.value })}
-                         placeholder="Ex: Mercearia, ou nome do produto, ou gold"
-                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {form.targetType === 'total' ? 'Alvo' : 'Alvo *'}
+                  </label>
+
+                  {form.targetType === 'category' && (
+                    <>
+                      <select value={form.targetValue} required
+                              onChange={(e) => setForm({ ...form, targetValue: e.target.value })}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                        <option value="">— Selecione a categoria —</option>
+                        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      {categories.length === 0 && (
+                        <p className="text-[11px] text-amber-600 mt-1">
+                          Nenhuma categoria encontrada — cadastre produtos com categoria primeiro.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {form.targetType === 'product' && (
+                    <>
+                      <input type="text" value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
+                             placeholder="🔍 Buscar por nome, SKU ou código de barras"
+                             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2" />
+                      <select value={form.targetValue} required size={5}
+                              onChange={(e) => setForm({ ...form, targetValue: e.target.value })}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                        {filteredProducts.slice(0, 100).map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{p.sku ? ` · ${p.sku}` : ''} — {brl(p.salePrice)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        {selectedProduct
+                          ? `Selecionado: ${selectedProduct.name}`
+                          : `${filteredProducts.length} produto(s) — clique para selecionar`}
+                      </p>
+                    </>
+                  )}
+
+                  {form.targetType === 'loyalty' && (
+                    <select value={form.targetValue} required
+                            onChange={(e) => setForm({ ...form, targetValue: e.target.value })}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                      <option value="">— Selecione o nível —</option>
+                      <option value="bronze">🥉 Bronze (até 499 pontos)</option>
+                      <option value="silver">🥈 Prata (500 a 999 pontos)</option>
+                      <option value="gold">🥇 Ouro (1000+ pontos)</option>
+                    </select>
+                  )}
+
+                  {form.targetType === 'total' && (
+                    <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      Não precisa de alvo: o desconto vale para toda a compra.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>

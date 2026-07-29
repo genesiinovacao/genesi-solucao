@@ -11,8 +11,11 @@ public class Tenant
     public string? Email { get; set; }
     public string? Address { get; set; }
     public decimal DailySalesTarget { get; set; }
-    /// <summary>Desconto acima deste percentual exige supervisor no PDV.</summary>
-    public decimal MaxDiscountPercent { get; set; } = 10m;
+    /// <summary>
+    /// Desconto acima deste percentual exige supervisor no PDV.
+    /// Zero (padrão) = caixa sem alçada: todo desconto passa por gerente.
+    /// </summary>
+    public decimal MaxDiscountPercent { get; set; }
     public string TaxRegime { get; set; } = "simples_nacional";
     public string? LogoEmoji { get; set; }
     public string? LogoBase64 { get; set; }

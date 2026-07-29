@@ -65,6 +65,23 @@ public class ProductsController : ControllerBase
         return Ok(new ProductListResponse(items, page, pageSize, total, totalPages));
     }
 
+    /// <summary>
+    /// Categorias em uso na loja. Alimenta a seleção de alvo da promoção —
+    /// digitar a categoria à mão fazia a promoção não pegar nada.
+    /// </summary>
+    [HttpGet("categories")]
+    public async Task<ActionResult<List<string>>> Categories(CancellationToken ct)
+    {
+        var categories = await _db.Products.AsNoTracking()
+            .Where(p => p.IsActive && p.Category != null && p.Category != "")
+            .Select(p => p.Category!)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToListAsync(ct);
+
+        return Ok(categories);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ProductDto>> Get(Guid id, CancellationToken ct)
     {
