@@ -178,7 +178,13 @@ export default function PDV() {
       const tag = e.target.tagName;
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       if (showOpenCash || showCloseCash || showPayment || showCashMovement || showReturnSale || showPrinterSettings || lastSale) return;
-      if (!inField && /^[\w\d]$/.test(e.key)) searchRef.current?.focus();
+      // Leitor bipando com o foco fora do campo: captura o caractere em vez
+      // de só focar, senão o primeiro dígito do código se perde.
+      if (!inField && /^[\w\d]$/.test(e.key)) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        setSearch((s) => s + e.key);
+      }
       if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === 'F10' && cart.length > 0) { e.preventDefault(); openPayment(); }
       if (e.key === 'Escape') setCustomerPickerOpen(false);
@@ -201,6 +207,36 @@ export default function PDV() {
       return matchSearch && matchCat && p.is_active;
     });
   }, [products, search, category]);
+
+  /**
+   * Bipe do leitor (ou Enter na busca). O termo vem do DOM, não do state:
+   * o leitor "digita" o código inteiro em milissegundos e o Enter chega
+   * antes do React reprocessar — usar o state perderia os últimos dígitos.
+   * Código de barras e SKU são exatos e ignoram o filtro de categoria.
+   */
+  const handleScan = (rawTerm) => {
+    const term = (rawTerm || '').trim();
+    if (!term) return;
+
+    const exact = products.find((p) => p.is_active && (p.barcode === term || p.sku === term));
+    if (exact) {
+      addToCart(exact);
+      return;
+    }
+
+    const lower = term.toLowerCase();
+    const byName = products.filter((p) => p.is_active && p.name.toLowerCase().includes(lower));
+    if (byName.length === 1) {
+      addToCart(byName[0]);
+      return;
+    }
+    if (byName.length === 0) {
+      // Sem isso o operador não sabe se o leitor falhou ou se falta cadastro
+      showToast(`Nenhum produto com o código "${term}". Cadastre-o no dashboard.`, 'error', 5000);
+      setSearch('');
+    }
+    // Vários resultados: mantém a lista filtrada para o operador escolher
+  };
 
   const subtotal = cart.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const discountAmount = subtotal * (Number(discountPct) || 0) / 100;
@@ -227,6 +263,8 @@ export default function PDV() {
       }];
     });
     setSearch('');
+    // Deixa o campo pronto para o próximo bipe, mesmo se o item veio do clique
+    searchRef.current?.focus();
   };
 
   const updateQty = (productId, delta) => setCart((prev) =>
@@ -387,7 +425,10 @@ export default function PDV() {
           <input ref={searchRef} type="text" placeholder="🔍 Buscar / escanear código de barras (F2)…"
                  value={search} onChange={(e) => setSearch(e.target.value)}
                  onKeyDown={(e) => {
-                   if (e.key === 'Enter' && filteredProducts.length === 1) addToCart(filteredProducts[0]);
+                   if (e.key === 'Enter') {
+                     e.preventDefault();
+                     handleScan(e.currentTarget.value);
+                   }
                  }}
                  className="flex-1 bg-slate-800 border border-slate-700 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none" />
           <select value={category} onChange={(e) => setCategory(e.target.value)}
