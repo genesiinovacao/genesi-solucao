@@ -30,3 +30,26 @@ services:
         value: homologation
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      # Dashboard hospedado aqui no Render (ver serviço abaixo)
+      - key: Cors__AllowedOrigins__2
+        value: "https://solucao-dashboard.onrender.com"
+
+  # ==========================================================================
+  # Dashboard (React/Vite) — site estático no mesmo painel do backend.
+  # Existe porque o free tier do Netlify pausa deploys ao esgotar créditos;
+  # aqui o build de estático não consome cota de horas.
+  # ==========================================================================
+  - type: web
+    name: solucao-dashboard
+    runtime: static
+    rootDir: solucao-2026/dashboard
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: "https://solucao-backend.onrender.com"
+    routes:
+      # SPA: qualquer rota do React Router cai no index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
