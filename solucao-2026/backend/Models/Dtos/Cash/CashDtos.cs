@@ -33,7 +33,10 @@ public record CashMovementDto(
 public record CashMovementRequest(
     [Required] string Type,              // supply | withdraw
     [Range(0.01, 9999999.99)] decimal Amount,
-    string? Reason);
+    string? Reason,
+    // Sangria feita pelo caixa exige aval: código e PIN do gerente
+    string? SupervisorCode = null,
+    string? SupervisorPin = null);
 
 public record CashSessionSummaryDto(
     Guid SessionId,

@@ -10,6 +10,10 @@ export default function CashMovementModal({ sessionId, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Sangria feita pelo caixa precisa de aval do gerente (validado no servidor)
+  const [supCode, setSupCode] = useState('');
+  const [supPin, setSupPin] = useState('');
+  const [needsSupervisor, setNeedsSupervisor] = useState(false);
 
   const isWithdraw = type === 'withdraw';
 
@@ -24,10 +28,15 @@ export default function CashMovementModal({ sessionId, onClose, onDone }) {
     try {
       await api.post(`/api/cash-sessions/${sessionId}/movements`, {
         type, amount: value, reason: reason.trim(),
+        supervisorCode: supCode.trim() || null,
+        supervisorPin: supPin.trim() || null,
       });
       onDone?.({ type, amount: value, reason: reason.trim() });
     } catch (err) {
+      // 403 com requiresSupervisor: mostra os campos e deixa o gerente liberar
+      if (err.response?.data?.requiresSupervisor) setNeedsSupervisor(true);
       setError(err.response?.data?.error || err.message);
+      setSupPin('');
     } finally {
       setLoading(false);
     }
@@ -81,6 +90,21 @@ export default function CashMovementModal({ sessionId, onClose, onDone }) {
                    placeholder={isWithdraw ? 'Ex: Pagamento de fornecedor, troco extra...' : 'Ex: Reforço de troco, reposição...'}
                    className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none text-sm" />
           </div>
+
+          {needsSupervisor && isWithdraw && (
+            <div className="border border-amber-700 bg-amber-950/30 rounded-lg p-3 space-y-2">
+              <p className="text-xs text-amber-300 font-semibold">🔑 Autorização do gerente</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" value={supCode} onChange={(e) => setSupCode(e.target.value.toUpperCase())}
+                       placeholder="Código" maxLength={10} autoFocus
+                       className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-center font-mono focus:border-amber-500 focus:outline-none" />
+                <input type="password" inputMode="numeric" value={supPin} maxLength={8}
+                       onChange={(e) => setSupPin(e.target.value.replace(/\D/g, ''))}
+                       placeholder="PIN"
+                       className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-center font-mono tracking-widest focus:border-amber-500 focus:outline-none" />
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="text-sm text-rose-300 bg-rose-950/50 border border-rose-800 rounded-lg p-3">⚠️ {error}</div>

@@ -29,12 +29,17 @@ export default function Login() {
   const bootstrap = async () => {
     setStep('bootstrap');
     // Pull the freshest catalogue from the backend so the PDV can sell offline
-    const [products, customers, settings] = await Promise.all([
+    const [products, customers, settings, promotions] = await Promise.all([
       api.get('/api/products', { params: { pageSize: 500 } }).then(r => r.data.items),
       api.get('/api/customers', { params: { pageSize: 1000 } }).then(r => r.data.items),
       api.get('/api/settings').then(r => r.data).catch(() => null),
+      // Promoções vigentes viajam junto: o PDV aplica o desconto offline
+      api.get('/api/promotions', { params: { state: 'active', pageSize: 200 } })
+        .then(r => r.data.items).catch(() => []),
     ]);
-    await window.pdv.saveSnapshot({ products, customers, settings });
+    await window.pdv.saveSnapshot({
+      products, customers, settings: { ...(settings || {}), promotions },
+    });
   };
 
   const handleSubmit = async (e) => {

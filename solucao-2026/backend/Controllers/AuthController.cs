@@ -18,16 +18,18 @@ public class AuthController : ControllerBase
     private readonly IJwtService _jwt;
     private readonly IConfiguration _config;
     private readonly IAuditService _audit;
+    private readonly IOperatorAuthService _operators;
     private readonly ILogger<AuthController> _log;
 
     public AuthController(
         AppDbContext db, IJwtService jwt, IConfiguration config,
-        IAuditService audit, ILogger<AuthController> log)
+        IAuditService audit, IOperatorAuthService operators, ILogger<AuthController> log)
     {
         _db = db;
         _jwt = jwt;
         _config = config;
         _audit = audit;
+        _operators = operators;
         _log = log;
     }
 
@@ -309,7 +311,7 @@ public class AuthController : ControllerBase
         var tenantIdClaim = User.FindFirstValue(JwtService.TenantIdClaim);
         if (!Guid.TryParse(tenantIdClaim, out var tenantId)) return Unauthorized();
 
-        var target = await FindOperatorAsync(req.OperatorCode, req.Pin, ct);
+        var target = await _operators.FindAsync(req.OperatorCode, req.Pin, ct);
         if (target is null)
         {
             _log.LogInformation("Troca de operador recusada para o código {Code}", req.OperatorCode);
@@ -343,11 +345,12 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<AuthorizationDto>> AuthorizeAction(
         [FromBody] AuthorizeRequest req, CancellationToken ct)
     {
-        var supervisor = await FindOperatorAsync(req.OperatorCode, req.Pin, ct);
-        if (supervisor is null)
+        var found = await _operators.FindAsync(req.OperatorCode, req.Pin, ct);
+        if (found is null)
             return Unauthorized(new { error = "Código ou PIN inválido." });
-        if (supervisor.Role is not ("admin" or "manager"))
-            return StatusCode(403, new { error = $"{supervisor.Name} não tem permissão para autorizar." });
+        if (found.Role is not ("admin" or "manager"))
+            return StatusCode(403, new { error = $"{found.Name} não tem permissão para autorizar." });
+        var supervisor = found;
 
         // Fica no log: quem autorizou o quê, e de qual caixa
         _audit.Log("pos.authorize", "user", supervisor.Id,
@@ -358,21 +361,6 @@ public class AuthController : ControllerBase
             supervisor.Name, req.Action, req.Value);
 
         return Ok(new AuthorizationDto(true, supervisor.Name, supervisor.Role));
-    }
-
-    /// <summary>Operador ativo da loja atual com código e PIN conferidos.</summary>
-    private async Task<User?> FindOperatorAsync(string? code, string? pin, CancellationToken ct)
-    {
-        var normalized = code?.Trim().ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(normalized) || string.IsNullOrWhiteSpace(pin)) return null;
-
-        // RLS já limita à loja da sessão. Sem AsNoTracking: o SwitchOperator
-        // grava o último acesso na mesma instância.
-        var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.OperatorCode == normalized && u.IsActive, ct);
-
-        if (user?.PinHash is null) return null;
-        return BCrypt.Net.BCrypt.Verify(pin, user.PinHash) ? user : null;
     }
 
     /// <summary>IP de origem — atrás do proxy vem no X-Forwarded-For.</summary>

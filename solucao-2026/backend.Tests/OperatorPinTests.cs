@@ -42,7 +42,8 @@ public class OperatorPinTests
         var db = TestDb.Create();
         var config = Config();
         var controller = new AuthController(
-            db, new JwtService(config), config, new FakeAudit(), NullLogger<AuthController>.Instance);
+            db, new JwtService(config), config, new FakeAudit(),
+            new OperatorAuthService(db), NullLogger<AuthController>.Instance);
 
         var claims = new List<Claim>
         {

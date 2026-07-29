@@ -51,6 +51,7 @@ export default function PDV() {
   const [operatorModal, setOperatorModal] = useState(null); // {mode, action, value, onDone}
   const [currentUser, setCurrentUser] = useState(user);     // operador do turno
   const [maxDiscount, setMaxDiscount] = useState(100);      // limite sem supervisor
+  const [promotions, setPromotions] = useState([]);         // vigentes, do dashboard
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState(null);
   const [logo, setLogo] = useState(null);             // logo do cliente
   const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
@@ -74,7 +75,41 @@ export default function PDV() {
     setStoreName(settings?.name || null);
     // Limite de desconto definido pela loja (acima disso, pede supervisor)
     if (settings?.maxDiscountPercent != null) setMaxDiscount(Number(settings.maxDiscountPercent));
+    setPromotions(settings?.promotions || []);
   };
+
+  // ---- Promoções cadastradas no dashboard ----
+
+  const tierOf = (points) => (points >= 1000 ? 'gold' : points >= 500 ? 'silver' : 'bronze');
+
+  /** Promoção vigente que mais desconta para este produto (e cliente, se houver). */
+  const promoFor = (product, customer) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const category = (product.category || '').trim().toLowerCase();
+
+    const applicable = promotions.filter((p) => {
+      if (!p.isActive) return false;
+      if (p.startsAt > today || p.endsAt < today) return false;
+      const target = (p.targetValue || '').trim().toLowerCase();
+      switch (p.targetType) {
+        case 'product':  return p.targetValue === product.id;
+        case 'category': return !!category && target === category;
+        case 'loyalty':  return !!customer && target === tierOf(customer.loyalty_points || 0);
+        default:         return false;   // 'total' entra no desconto do carrinho
+      }
+    });
+
+    return applicable.sort((a, b) => b.discountPercent - a.discountPercent)[0] || null;
+  };
+
+  /** Promoção do tipo 'total' vigente — desconto automático no carrinho. */
+  const totalPromo = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return promotions
+      .filter((p) => p.isActive && p.targetType === 'total' && p.startsAt <= today && p.endsAt >= today)
+      .sort((a, b) => b.discountPercent - a.discountPercent)[0] || null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promotions]);
 
   // ---- Troca de turno: outro operador assume sem fechar o caixa ----
   const openOperatorSwitch = () => {
@@ -200,12 +235,16 @@ export default function PDV() {
           return;
         }
       }
-      const [p, c, settings] = await Promise.all([
+      const [p, c, settings, promos] = await Promise.all([
         api.get('/api/products', { params: { pageSize: 500 } }).then((r) => r.data.items),
         api.get('/api/customers', { params: { pageSize: 1000 } }).then((r) => r.data.items),
         api.get('/api/settings').then((r) => r.data).catch(() => null),
+        api.get('/api/promotions', { params: { state: 'active', pageSize: 200 } })
+          .then((r) => r.data.items).catch(() => []),
       ]);
-      await window.pdv.saveSnapshot({ products: p, customers: c, settings });
+      await window.pdv.saveSnapshot({
+        products: p, customers: c, settings: { ...(settings || {}), promotions: promos },
+      });
       await loadLocal();
       if (manual) showToast('Catálogo atualizado.', 'success');
     } catch (err) {
@@ -289,8 +328,14 @@ export default function PDV() {
     // Vários resultados: mantém a lista filtrada para o operador escolher
   };
 
+  // Subtotal é sempre o bruto; promoções e desconto manual somam no abatimento
   const subtotal = cart.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-  const discountAmount = subtotal * (Number(discountPct) || 0) / 100;
+  const promoDiscount = cart.reduce((sum, i) => sum + (i.discountAmount || 0), 0);
+  const afterPromo = subtotal - promoDiscount;
+  // Promoção "sobre o total" e desconto manual não se acumulam: vale o maior
+  const effectivePct = Math.max(Number(discountPct) || 0, totalPromo?.discountPercent || 0);
+  const manualDiscount = afterPromo * effectivePct / 100;
+  const discountAmount = promoDiscount + manualDiscount;
   const total = Math.max(0, subtotal - discountAmount);
 
   function showToast(text, kind = 'info', ms = 3000) {
@@ -299,17 +344,31 @@ export default function PDV() {
   }
 
   // ---- Cart ops ----
+
+  /** Recalcula o item mantendo o percentual da promoção aplicada. */
+  const withQuantity = (item, quantity) => {
+    const gross = quantity * item.unitPrice;
+    const discount = gross * ((item.promoPercent || 0) / 100);
+    return { ...item, quantity, discountAmount: discount, totalPrice: gross - discount };
+  };
+
   const addToCart = (p) => {
     if (p.stock_quantity <= 0) return showToast(`${p.name} está sem estoque.`, 'error');
     setCart((prev) => {
       const found = prev.find((i) => i.productId === p.id);
       if (found) {
         if (found.quantity + 1 > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
-        return prev.map((i) => i.productId === p.id ? { ...i, quantity: i.quantity + 1, totalPrice: (i.quantity + 1) * i.unitPrice } : i);
+        return prev.map((i) => i.productId === p.id ? withQuantity(i, i.quantity + 1) : i);
       }
+      const promo = promoFor(p, selectedCustomer);
+      const pct = promo?.discountPercent || 0;
       return [...prev, {
         productId: p.id, productName: p.name, emoji: p.emoji,
-        quantity: 1, unitPrice: p.sale_price, totalPrice: p.sale_price, discountAmount: 0,
+        quantity: 1, unitPrice: p.sale_price,
+        totalPrice: p.sale_price * (1 - pct / 100),
+        discountAmount: p.sale_price * (pct / 100),
+        promoName: promo?.name || null,
+        promoPercent: pct,
         stockAvailable: p.stock_quantity,
       }];
     });
@@ -324,7 +383,7 @@ export default function PDV() {
       const q = i.quantity + delta;
       if (q <= 0) return [];
       if (q > i.stockAvailable) { showToast(`Estoque máximo: ${i.stockAvailable}`, 'error'); return [i]; }
-      return [{ ...i, quantity: q, totalPrice: q * i.unitPrice }];
+      return [withQuantity(i, q)];
     })
   );
 
@@ -504,7 +563,14 @@ export default function PDV() {
               {filteredProducts.map((p) => (
                 <button key={p.id} onClick={() => addToCart(p)} disabled={p.stock_quantity <= 0}
                         className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-4 text-left border border-transparent hover:border-blue-500 transition-all">
-                  <div className="text-3xl mb-2">{p.emoji}</div>
+                  <div className="flex items-start justify-between">
+                    <div className="text-3xl mb-2">{p.emoji}</div>
+                    {promoFor(p, selectedCustomer) && (
+                      <span className="text-[10px] font-bold bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded">
+                        -{promoFor(p, selectedCustomer).discountPercent}%
+                      </span>
+                    )}
+                  </div>
                   <div className="font-semibold text-sm leading-tight mb-1 line-clamp-2">{p.name}</div>
                   <div className="text-blue-400 font-bold text-lg">{brl(p.sale_price)}</div>
                   <div className={`text-[10px] mt-1.5 inline-block px-2 py-0.5 rounded-full font-medium ${stockBadge(p)}`}>
@@ -548,7 +614,12 @@ export default function PDV() {
                   <span className="text-2xl">{i.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{i.productName}</div>
-                    <div className="text-xs text-slate-400">{brl(i.unitPrice)} cada</div>
+                    <div className="text-xs text-slate-400">
+                      {brl(i.unitPrice)} cada
+                      {i.promoPercent > 0 && (
+                        <span className="text-amber-400"> · {i.promoName} -{i.promoPercent}%</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => updateQty(i.productId, -1)} className="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded text-sm">−</button>
@@ -567,6 +638,18 @@ export default function PDV() {
             <span>Subtotal</span>
             <span>{brl(subtotal)}</span>
           </div>
+          {promoDiscount > 0 && (
+            <div className="flex justify-between text-xs text-amber-400">
+              <span>🏷️ Promoções</span>
+              <span>- {brl(promoDiscount)}</span>
+            </div>
+          )}
+          {totalPromo && effectivePct === totalPromo.discountPercent && (
+            <div className="flex justify-between text-xs text-amber-400">
+              <span>🏷️ {totalPromo.name}</span>
+              <span>-{totalPromo.discountPercent}% no total</span>
+            </div>
+          )}
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400">Desconto (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={discountPct}

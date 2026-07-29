@@ -15,11 +15,16 @@ public class CashSessionsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IOperatorAuthService _operators;
+    private readonly IAuditService _audit;
 
-    public CashSessionsController(AppDbContext db, ITenantContext tenant)
+    public CashSessionsController(
+        AppDbContext db, ITenantContext tenant, IOperatorAuthService operators, IAuditService audit)
     {
         _db = db;
         _tenant = tenant;
+        _operators = operators;
+        _audit = audit;
     }
 
     private static CashSessionDto ToDto(CashSession s, string userName) => new(
@@ -115,8 +120,26 @@ public class CashSessionsController : ControllerBase
         if (req.Type != "supply" && req.Type != "withdraw")
             return BadRequest(new { error = "Tipo deve ser 'supply' ou 'withdraw'." });
 
+        // Sangria tira dinheiro do caixa: exige aval de quem responde pela loja.
+        // Suprimento (entrada de troco) o operador faz sozinho.
+        Models.Entities.User? supervisor = null;
+        if (req.Type == "withdraw" && _tenant.Role == "cashier")
+        {
+            supervisor = await _operators.FindSupervisorAsync(req.SupervisorCode, req.SupervisorPin, ct);
+            if (supervisor is null)
+                return StatusCode(403, new
+                {
+                    error = "Sangria exige autorização de um gerente ou administrador (código e PIN).",
+                    requiresSupervisor = true,
+                });
+        }
+
         var s = await _db.CashSessions.FirstOrDefaultAsync(x => x.Id == id && x.ClosedAt == null, ct);
         if (s is null) return NotFound(new { error = "Caixa fechado ou inexistente." });
+
+        var reason = supervisor is null
+            ? req.Reason
+            : $"{req.Reason} (autorizado por {supervisor.Name})";
 
         var m = new CashMovement
         {
@@ -124,10 +147,15 @@ public class CashSessionsController : ControllerBase
             SessionId = s.Id,
             Type = req.Type,
             Amount = req.Amount,
-            Reason = req.Reason,
+            Reason = reason,
             CreatedAt = DateTime.UtcNow,
         };
         _db.CashMovements.Add(m);
+
+        if (req.Type == "withdraw")
+            _audit.Log("cash.withdraw", "cash_session", s.Id,
+                new { amount = req.Amount, authorizedBy = supervisor?.Name });
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(new CashMovementDto(m.Id, m.Type, m.Amount, m.Reason, m.CreatedAt));
