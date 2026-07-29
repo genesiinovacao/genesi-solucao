@@ -29,4 +29,6 @@ public record UpdateTenantSettingsRequest(
     [Range(0, 9999999.99)] decimal DailySalesTarget,
     [Range(0, 100)] decimal MaxDiscountPercent,
     string TaxRegime,
-    string? LogoEmoji);
+    string? LogoEmoji,
+    /// <summary>Logo da loja (data URL). O próprio admin carrega em Configurações.</summary>
+    string? LogoBase64 = null);

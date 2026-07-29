@@ -16,6 +16,7 @@ export default function Settings() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  const [logoError, setLogoError] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -42,6 +43,7 @@ export default function Settings() {
         maxDiscountPercent: Number(data.maxDiscountPercent) || 0,
         taxRegime: data.taxRegime,
         logoEmoji: data.logoEmoji || null,
+        logoBase64: data.logoBase64 || null,
       };
       const { data: res } = await api.put('/api/settings', payload);
       setData(res);
@@ -75,11 +77,52 @@ export default function Settings() {
       <form onSubmit={save} className="bg-white rounded-xl shadow-sm border border-slate-200 divide-y divide-slate-100">
         <section className="p-6 space-y-4">
           <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">🏢 Dados da empresa</h2>
+
+          {/* Logo da loja: aparece no menu do dashboard e no topo do PDV */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Logo da loja</label>
+            <div className="flex items-center gap-4">
+              {data.logoBase64 ? (
+                <img src={data.logoBase64} alt="Logo da loja"
+                     className="w-20 h-20 object-contain rounded-xl border border-slate-200 bg-white p-1" />
+              ) : (
+                <div className="w-20 h-20 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-3xl text-slate-300">
+                  🏪
+                </div>
+              )}
+              <div className="space-y-1">
+                <input type="file" accept="image/*"
+                       onChange={(e) => {
+                         const file = e.target.files?.[0];
+                         if (!file) return;
+                         if (file.size > 200 * 1024) {
+                           setLogoError('Imagem muito grande — use até 200 KB (PNG pequeno ou SVG).');
+                           return;
+                         }
+                         setLogoError('');
+                         const reader = new FileReader();
+                         reader.onload = () => setData((d) => ({ ...d, logoBase64: reader.result }));
+                         reader.readAsDataURL(file);
+                       }}
+                       className="text-xs text-slate-500 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-xs file:font-medium hover:file:bg-blue-100" />
+                {data.logoBase64 && (
+                  <button type="button" onClick={() => setData({ ...data, logoBase64: null })}
+                          className="block text-xs text-red-500 hover:underline">Remover logo</button>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Aparece no menu do dashboard e no topo do PDV. Ideal: quadrada, fundo transparente, até 200 KB.
+                </p>
+              </div>
+            </div>
+            {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Logo (emoji)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Ícone (emoji)</label>
               <input type="text" maxLength={4} value={data.logoEmoji || ''} onChange={(e) => setData({ ...data, logoEmoji: e.target.value })}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-2xl text-center" />
+              <p className="text-[11px] text-slate-400 mt-0.5">Usado quando não há logo</p>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">Nome da empresa *</label>

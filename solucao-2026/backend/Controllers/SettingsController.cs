@@ -64,10 +64,15 @@ public class SettingsController : ControllerBase
         t.Phone = req.Phone;
         t.Email = req.Email;
         t.Address = req.Address;
+        // ~200 KB de imagem => ~270 KB em base64
+        if (req.LogoBase64 is { Length: > 300_000 })
+            return BadRequest(new { error = "Logo muito grande — use uma imagem de até ~200 KB." });
+
         t.DailySalesTarget = req.DailySalesTarget;
         t.MaxDiscountPercent = req.MaxDiscountPercent;
         t.TaxRegime = req.TaxRegime;
         t.LogoEmoji = req.LogoEmoji;
+        t.LogoBase64 = req.LogoBase64;
 
         await _db.SaveChangesAsync(ct);
 

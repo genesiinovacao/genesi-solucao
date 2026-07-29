@@ -117,21 +117,20 @@ export default function Layout() {
                 <p className="text-[11px] text-slate-400">Painel da Plataforma</p>
               </div>
             </div>
-          ) : branding?.clientLogo ? (
+          ) : (
+            // Logo da loja à frente da marca; sem logo, só a marca
             <div className="flex items-center gap-3">
-              <img src={branding.clientLogo} alt="logo"
-                   className="w-11 h-11 object-contain rounded-lg bg-white/95 p-1" />
+              {branding?.clientLogo && (
+                <img src={branding.clientLogo} alt={user?.tenantName || 'Logo da loja'}
+                     className="w-12 h-12 object-contain rounded-lg bg-white/95 p-1 shrink-0" />
+              )}
               <div className="min-w-0">
-                <p className="text-sm font-bold truncate">{user?.tenantName}</p>
+                <h1 className="text-xl font-bold leading-tight">
+                  SOLUÇÃO <span className="text-blue-400">2026</span>
+                </h1>
+                <p className="text-xs text-slate-400 truncate">{user?.tenantName}</p>
               </div>
             </div>
-          ) : (
-            <>
-              <h1 className="text-xl font-bold">
-                SOLUÇÃO <span className="text-blue-400">2026</span>
-              </h1>
-              <p className="text-xs text-slate-400 mt-1">{user?.tenantName}</p>
-            </>
           )}
         </div>
 

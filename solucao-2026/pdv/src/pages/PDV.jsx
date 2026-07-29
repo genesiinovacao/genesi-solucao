@@ -417,8 +417,9 @@ export default function PDV() {
         <header className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-900/50">
           <div className="flex items-center gap-3">
             {logo
-              ? <img src={logo} alt="logo" className="w-10 h-10 object-contain rounded-lg bg-white/95 p-0.5" />
-              : <div className="bg-blue-600 w-10 h-10 rounded-lg flex items-center justify-center text-xl">🛒</div>}
+              ? <img src={logo} alt={storeName || 'Logo da loja'}
+                     className="w-12 h-12 object-contain rounded-lg bg-white/95 p-1" />
+              : <div className="bg-blue-600 w-12 h-12 rounded-lg flex items-center justify-center text-2xl">🛒</div>}
             <div>
               <h1 className="text-lg font-bold">
                 {storeName || user?.tenantName || <>SOLUÇÃO <span className="text-blue-400">2026</span></>}
