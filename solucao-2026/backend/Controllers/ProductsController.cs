@@ -101,7 +101,14 @@ public class ProductsController : ControllerBase
         };
 
         _db.Products.Add(p);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            return Conflict(new { error = DuplicateMessage(req.Sku, req.Barcode) });
+        }
 
         return CreatedAtAction(nameof(Get), new { id = p.Id }, new ProductDto(
             p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
@@ -129,11 +136,32 @@ public class ProductsController : ControllerBase
         p.SupplierId = req.SupplierId;
         p.IsActive = req.IsActive;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            return Conflict(new { error = DuplicateMessage(req.Sku, req.Barcode) });
+        }
 
         return Ok(new ProductDto(
             p.Id, p.Sku, p.Barcode, p.Name, p.Description, p.Category, p.Unit, p.Emoji,
             p.CostPrice, p.SalePrice, p.StockQuantity, p.MinStock, p.ExpiryDate, p.IsActive, p.SupplierId, p.UpdatedAt));
+    }
+
+    // SKU e código de barras são únicos por loja. Sem isto o operador receberia
+    // um erro cru do banco — e com o SKU sugerido a colisão fica mais provável.
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: "23505" };
+
+    private static string DuplicateMessage(string? sku, string? barcode)
+    {
+        var campos = new List<string>();
+        if (!string.IsNullOrWhiteSpace(sku)) campos.Add($"SKU \"{sku}\"");
+        if (!string.IsNullOrWhiteSpace(barcode)) campos.Add($"código de barras \"{barcode}\"");
+        var alvo = campos.Count > 0 ? string.Join(" ou ", campos) : "SKU ou código de barras";
+        return $"Já existe um produto com esse {alvo}. Altere para um valor diferente.";
     }
 
     public record AdjustStockRequest(decimal NewQuantity, string? Reason);

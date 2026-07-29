@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { daysUntil } from '../lib/dates';
 
@@ -30,6 +30,31 @@ const EMPTY_FORM = {
   costPrice: '', salePrice: '', stockQuantity: '', minStock: '', expiryDate: '',
 };
 
+// Conectivos não entram nas iniciais: "Leite em Pó" vira LP, não LEP
+const SKU_STOPWORDS = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'com', 'sem', 'para', 'por',
+  'a', 'o', 'as', 'os', 'no', 'na', 'nos', 'nas', 'ao', 'à', 'um', 'uma',
+]);
+
+/**
+ * SKU sugerido: iniciais das palavras significativas + 3 primeiros dígitos
+ * do código de barras. "Leite em Pó Integral" + 3298199229 → LPI329.
+ */
+export function generateSku(name, barcode) {
+  const initials = (name || '')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')   // "Pó" -> "Po"
+    .split(/[\s\-/]+/)
+    .filter((w) => w && !SKU_STOPWORDS.has(w.toLowerCase()))
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 5);
+
+  const digits = (barcode || '').replace(/\D/g, '').slice(0, 3);
+  return initials && digits ? `${initials}${digits}` : '';
+}
+
 function ProductFormModal({ product, segment, onClose, onSaved }) {
   const isEdit = !!product?.id;
   const [form, setForm] = useState(isEdit ? {
@@ -47,8 +72,28 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
   } : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Para de sugerir assim que o operador escreve o próprio código
+  const [skuTouched, setSkuTouched] = useState(isEdit && !!product?.sku);
+  const costRef = useRef(null);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  // Sugere o SKU enquanto nome e código existirem — funciona tanto bipando
+  // antes de digitar o nome quanto o contrário.
+  useEffect(() => {
+    if (skuTouched) return;
+    const suggestion = generateSku(form.name, form.barcode);
+    if (suggestion && suggestion !== form.sku) setForm((f) => ({ ...f, sku: suggestion }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.name, form.barcode, skuTouched]);
+
+  // O leitor termina a leitura com Enter: aproveita para avançar o foco
+  const onBarcodeKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();   // não submete o formulário no meio do cadastro
+    costRef.current?.focus();
+    costRef.current?.select();
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -143,18 +188,23 @@ function ProductFormModal({ product, segment, onClose, onSaved }) {
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Código de barras</label>
               <input type="text" value={form.barcode} onChange={set('barcode')}
+                     onKeyDown={onBarcodeKeyDown} autoFocus={!isEdit}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                     placeholder="Somente números" />
+                     placeholder="Bipe o produto ou digite" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">SKU (código interno)</label>
-              <input type="text" value={form.sku} onChange={set('sku')}
+              <input type="text" value={form.sku}
+                     onChange={(e) => { setSkuTouched(true); set('sku')(e); }}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                     placeholder="Ex.: PROD-001" />
+                     placeholder="Gerado automaticamente" />
+              {!skuTouched && form.sku && (
+                <p className="text-[11px] text-slate-400 mt-0.5">Sugerido — pode editar</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de custo (R$)</label>
-              <input type="number" step="0.01" min="0" value={form.costPrice} onChange={set('costPrice')}
+              <input ref={costRef} type="number" step="0.01" min="0" value={form.costPrice} onChange={set('costPrice')}
                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="0,00" />
             </div>
             <div>
