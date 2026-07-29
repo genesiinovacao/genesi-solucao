@@ -10,6 +10,7 @@ import CashMovementModal from '../components/CashMovementModal';
 import ReturnSaleModal from '../components/ReturnSaleModal';
 import PrinterSettingsModal from '../components/PrinterSettingsModal';
 import PaymentModal from '../components/PaymentModal';
+import OperatorModal from '../components/OperatorModal';
 import Receipt from '../components/Receipt';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
@@ -47,6 +48,10 @@ export default function PDV() {
   const [showReturnSale, setShowReturnSale] = useState(false);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [lastSale, setLastSale] = useState(null); // exibe cupom após venda
+  const [operatorModal, setOperatorModal] = useState(null); // {mode, action, value, onDone}
+  const [currentUser, setCurrentUser] = useState(user);     // operador do turno
+  const [maxDiscount, setMaxDiscount] = useState(100);      // limite sem supervisor
+  const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState(null);
   const [logo, setLogo] = useState(null);             // logo do cliente
   const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
   const [storeName, setStoreName] = useState(null);
@@ -67,6 +72,52 @@ export default function PDV() {
     setLogo(settings?.logoBase64 || null);
     setGlobalLogo(settings?.globalLogoBase64 || null);
     setStoreName(settings?.name || null);
+    // Limite de desconto definido pela loja (acima disso, pede supervisor)
+    if (settings?.maxDiscountPercent != null) setMaxDiscount(Number(settings.maxDiscountPercent));
+  };
+
+  // ---- Troca de turno: outro operador assume sem fechar o caixa ----
+  const openOperatorSwitch = () => {
+    if (cart.length > 0) {
+      showToast('Finalize ou cancele a venda antes de trocar de operador.', 'error');
+      return;
+    }
+    setOperatorModal({
+      mode: 'switch',
+      onDone: (data) => {
+        auth.replaceSession({ accessToken: data.accessToken, user: data.user });
+        setCurrentUser(data.user);
+        setOperatorModal(null);
+        showToast(`Caixa assumido por ${data.user.name}.`, 'success');
+      },
+    });
+  };
+
+  /**
+   * Desconto acima do limite da loja exige supervisor. O valor só é aplicado
+   * depois do aval — e o desconto autorizado é anulado se o operador mexer
+   * de novo no percentual.
+   */
+  const onDiscountChange = (raw) => {
+    const pct = Number(raw) || 0;
+    setDiscountAuthorizedBy(null);
+
+    if (pct <= maxDiscount) {
+      setDiscountPct(raw);
+      return;
+    }
+
+    setOperatorModal({
+      mode: 'authorize',
+      action: `desconto de ${pct}% (limite da loja: ${maxDiscount}%)`,
+      value: pct,
+      onDone: (result) => {
+        setDiscountPct(raw);
+        setDiscountAuthorizedBy(result.supervisorName);
+        setOperatorModal(null);
+        showToast(`Desconto de ${pct}% autorizado por ${result.supervisorName}.`, 'success', 4000);
+      },
+    });
   };
 
   // ---- Probe backend for current cash session ----
@@ -416,7 +467,10 @@ export default function PDV() {
               <img src={globalLogo} alt="SOLUÇÃO" title="SOLUÇÃO 2026"
                    className="h-8 object-contain rounded bg-white/95 p-0.5" />
             )}
-            <span className="text-slate-300">👤 {user?.name}</span>
+            <button onClick={openOperatorSwitch} title="Trocar operador do caixa (troca de turno)"
+                    className="text-slate-300 hover:text-white text-sm px-2 py-1 rounded-lg hover:bg-slate-800">
+              👤 {currentUser?.name} <span className="text-slate-500 text-xs">⇄</span>
+            </button>
             <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm">🚪 Sair</button>
           </div>
         </header>
@@ -515,12 +569,12 @@ export default function PDV() {
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400">Desconto (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={discountPct}
-                   onChange={(e) => setDiscountPct(e.target.value)}
+                   onChange={(e) => onDiscountChange(e.target.value)}
                    className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-mono" />
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-xs text-emerald-400">
-              <span>Desconto</span>
+              <span>Desconto{discountAuthorizedBy && ` · aut. ${discountAuthorizedBy}`}</span>
               <span>- {brl(discountAmount)}</span>
             </div>
           )}
@@ -587,6 +641,16 @@ export default function PDV() {
 
       {showPrinterSettings && (
         <PrinterSettingsModal onClose={() => setShowPrinterSettings(false)} />
+      )}
+
+      {operatorModal && (
+        <OperatorModal
+          mode={operatorModal.mode}
+          action={operatorModal.action}
+          value={operatorModal.value}
+          onDone={operatorModal.onDone}
+          onClose={() => setOperatorModal(null)}
+        />
       )}
 
       {customerPickerOpen && (

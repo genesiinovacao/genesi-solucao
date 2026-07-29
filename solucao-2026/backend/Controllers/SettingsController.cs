@@ -47,7 +47,7 @@ public class SettingsController : ControllerBase
 
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
+            t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
             t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
     }
 
@@ -65,6 +65,7 @@ public class SettingsController : ControllerBase
         t.Email = req.Email;
         t.Address = req.Address;
         t.DailySalesTarget = req.DailySalesTarget;
+        t.MaxDiscountPercent = req.MaxDiscountPercent;
         t.TaxRegime = req.TaxRegime;
         t.LogoEmoji = req.LogoEmoji;
 
@@ -75,7 +76,7 @@ public class SettingsController : ControllerBase
 
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
-            t.DailySalesTarget, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
+            t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
             t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
     }
 }

@@ -14,8 +14,10 @@ const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR') : '—
 function UserFormModal({ user, onClose, onSaved }) {
   const isEdit = !!user;
   const [form, setForm] = useState(isEdit
-    ? { name: user.name, role: user.role, isActive: user.isActive, email: user.email, password: '' }
-    : { name: '', email: '', password: '', role: 'cashier', isActive: true });
+    ? { name: user.name, role: user.role, isActive: user.isActive, email: user.email,
+        password: '', operatorCode: user.operatorCode || '', pin: '' }
+    : { name: '', email: '', password: '', role: 'cashier', isActive: true,
+        operatorCode: '', pin: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,10 +32,15 @@ function UserFormModal({ user, onClose, onSaved }) {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.put(`/api/users/${user.id}`, { name: form.name, role: form.role, isActive: form.isActive });
+        await api.put(`/api/users/${user.id}`, {
+          name: form.name, role: form.role, isActive: form.isActive,
+          operatorCode: form.operatorCode.trim() || null,
+        });
       } else {
         await api.post('/api/users', {
           name: form.name, email: form.email, password: form.password, role: form.role,
+          operatorCode: form.operatorCode.trim() || null,
+          pin: form.pin.trim() || null,
         });
       }
       onSaved();
@@ -70,6 +77,33 @@ function UserFormModal({ user, onClose, onSaved }) {
               </div>
             </>
           )}
+          <fieldset className="border border-slate-200 rounded-xl p-4 space-y-3">
+            <legend className="text-xs font-semibold text-slate-500 px-1">Acesso rápido no PDV</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Código do operador</label>
+                <input type="text" value={form.operatorCode} maxLength={10}
+                       onChange={(e) => setForm({ ...form, operatorCode: e.target.value.toUpperCase() })}
+                       placeholder="Ex.: 01"
+                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
+              </div>
+              {!isEdit && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">PIN (4 a 8 dígitos)</label>
+                  <input type="text" inputMode="numeric" value={form.pin} maxLength={8}
+                         onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })}
+                         placeholder="Ex.: 4729"
+                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Com código e PIN o operador assume o caixa sem digitar e-mail e senha.
+              Gerente e admin usam o mesmo PIN para autorizar desconto acima do limite.
+              {isEdit && ' O PIN é alterado pelo botão "PIN" na listagem.'}
+            </p>
+          </fieldset>
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Papel *</label>
             <select value={form.role} onChange={set('role')}
@@ -90,6 +124,61 @@ function UserFormModal({ user, onClose, onSaved }) {
             <button type="submit" disabled={saving}
                     className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
               {saving ? 'Salvando…' : (isEdit ? 'Salvar' : 'Criar usuário')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function PinModal({ user, onClose, onSaved }) {
+  const [pin, setPin] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      await api.post(`/api/users/${user.id}/pin`, { pin: pin.trim() || null });
+      onSaved(pin.trim());
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
+        <header className="p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">🔢 PIN do caixa</h2>
+          <p className="text-xs text-slate-500 mt-1">{user.name} — código {user.operatorCode || 'não definido'}</p>
+        </header>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Novo PIN (4 a 8 dígitos)</label>
+            <input type="text" inputMode="numeric" autoFocus value={pin} maxLength={8}
+                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-lg font-mono text-center tracking-widest" />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Deixe em branco para remover o acesso rápido deste usuário.
+            </p>
+          </div>
+          {!user.operatorCode && (
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Este usuário ainda não tem código de operador — defina em Editar,
+              senão ele não consegue usar o PIN no PDV.
+            </div>
+          )}
+          {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">⚠️ {error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm">Cancelar</button>
+            <button type="submit" disabled={saving}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+              {saving ? 'Salvando…' : 'Salvar PIN'}
             </button>
           </div>
         </form>
@@ -166,6 +255,7 @@ export default function Team() {
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState(undefined); // undefined | null (novo) | user
   const [resetting, setResetting] = useState(null);
+  const [pinning, setPinning] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -234,7 +324,14 @@ export default function Team() {
                   <p className="font-medium text-slate-800">{u.name}{u.id === me?.id && <span className="text-xs text-slate-400"> (você)</span>}</p>
                   <p className="text-xs text-slate-500">{u.email}</p>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{roleLabel(u.role)}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {roleLabel(u.role)}
+                  {u.operatorCode && (
+                    <span className="block text-[11px] text-slate-400 font-mono">
+                      cód. {u.operatorCode}{u.hasPin ? ' · PIN ✓' : ' · sem PIN'}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(u.lastLoginAt)}</td>
                 <td className="px-4 py-3">
                   {u.isActive
@@ -242,6 +339,8 @@ export default function Team() {
                     : <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Bloqueado</span>}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button onClick={() => setPinning(u)} title="PIN de acesso rápido no PDV"
+                          className="text-slate-600 hover:underline text-sm mr-3">PIN</button>
                   <button onClick={() => setResetting(u)} className="text-indigo-600 hover:underline text-sm mr-3">Redefinir senha</button>
                   <button onClick={() => setEditing(u)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 </td>
@@ -296,6 +395,20 @@ export default function Team() {
           user={editing}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); load(); }}
+        />
+      )}
+
+      {pinning && (
+        <PinModal
+          user={pinning}
+          onClose={() => setPinning(null)}
+          onSaved={(pin) => {
+            setNotice(pin
+              ? `✅ PIN de ${pinning.name} definido: ${pin} — anote antes de fechar este aviso.`
+              : `PIN de ${pinning.name} removido.`);
+            setPinning(null);
+            load();
+          }}
         />
       )}
 

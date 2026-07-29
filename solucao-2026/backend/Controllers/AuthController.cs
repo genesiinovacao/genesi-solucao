@@ -17,13 +17,17 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IJwtService _jwt;
     private readonly IConfiguration _config;
+    private readonly IAuditService _audit;
     private readonly ILogger<AuthController> _log;
 
-    public AuthController(AppDbContext db, IJwtService jwt, IConfiguration config, ILogger<AuthController> log)
+    public AuthController(
+        AppDbContext db, IJwtService jwt, IConfiguration config,
+        IAuditService audit, ILogger<AuthController> log)
     {
         _db = db;
         _jwt = jwt;
         _config = config;
+        _audit = audit;
         _log = log;
     }
 
@@ -282,6 +286,93 @@ public class AuthController : ControllerBase
         return Ok(new LoginResponse(
             access, "", expiresAt,
             new UserDto(user.Id, target.Id, target.Name, user.Name, user.Email, user.Role)));
+    }
+
+    // =======================================================================
+    // Operação de caixa — troca de turno e autorização de supervisor
+    // =======================================================================
+
+    public record OperatorLoginRequest(string OperatorCode, string Pin);
+    public record AuthorizeRequest(string OperatorCode, string Pin, string Action, decimal? Value);
+    public record AuthorizationDto(bool Authorized, string SupervisorName, string Role);
+
+    /// <summary>
+    /// Troca o operador do caixa sem sair do aplicativo. Exige uma sessão
+    /// já autenticada (o PDV entrou com e-mail e senha ao ser instalado):
+    /// é ela que define a loja onde o código do operador é procurado.
+    /// </summary>
+    [HttpPost("switch-operator")]
+    [Authorize]
+    public async Task<ActionResult<LoginResponse>> SwitchOperator(
+        [FromBody] OperatorLoginRequest req, CancellationToken ct)
+    {
+        var tenantIdClaim = User.FindFirstValue(JwtService.TenantIdClaim);
+        if (!Guid.TryParse(tenantIdClaim, out var tenantId)) return Unauthorized();
+
+        var target = await FindOperatorAsync(req.OperatorCode, req.Pin, ct);
+        if (target is null)
+        {
+            _log.LogInformation("Troca de operador recusada para o código {Code}", req.OperatorCode);
+            return Unauthorized(new { error = "Código ou PIN inválido." });
+        }
+
+        var tenantName = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? "";
+
+        var (access, expiresAt) = _jwt.GenerateAccessToken(target, tenantName);
+
+        // Marca o acesso do turno (via EF: o RLS já restringe à loja da sessão)
+        target.LastLoginAt = DateTime.UtcNow;
+        _audit.Log("pos.operator_switch", "user", target.Id, new { code = target.OperatorCode });
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Operador do caixa trocado para {Name} ({Code})", target.Name, target.OperatorCode);
+
+        // Sem refresh: a sessão do turno expira sozinha
+        return Ok(new LoginResponse(
+            access, "", expiresAt,
+            new UserDto(target.Id, tenantId, tenantName, target.Name, target.Email, target.Role)));
+    }
+
+    /// <summary>
+    /// Autoriza uma operação sensível (desconto acima do limite, por exemplo)
+    /// sem trocar quem está no caixa. Só admin ou gerente autorizam.
+    /// </summary>
+    [HttpPost("authorize")]
+    [Authorize]
+    public async Task<ActionResult<AuthorizationDto>> AuthorizeAction(
+        [FromBody] AuthorizeRequest req, CancellationToken ct)
+    {
+        var supervisor = await FindOperatorAsync(req.OperatorCode, req.Pin, ct);
+        if (supervisor is null)
+            return Unauthorized(new { error = "Código ou PIN inválido." });
+        if (supervisor.Role is not ("admin" or "manager"))
+            return StatusCode(403, new { error = $"{supervisor.Name} não tem permissão para autorizar." });
+
+        // Fica no log: quem autorizou o quê, e de qual caixa
+        _audit.Log("pos.authorize", "user", supervisor.Id,
+            new { action = req.Action, value = req.Value, byOperator = User.FindFirstValue(ClaimTypes.NameIdentifier) });
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Autorização de {Supervisor} para {Action} (valor {Value})",
+            supervisor.Name, req.Action, req.Value);
+
+        return Ok(new AuthorizationDto(true, supervisor.Name, supervisor.Role));
+    }
+
+    /// <summary>Operador ativo da loja atual com código e PIN conferidos.</summary>
+    private async Task<User?> FindOperatorAsync(string? code, string? pin, CancellationToken ct)
+    {
+        var normalized = code?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalized) || string.IsNullOrWhiteSpace(pin)) return null;
+
+        // RLS já limita à loja da sessão. Sem AsNoTracking: o SwitchOperator
+        // grava o último acesso na mesma instância.
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.OperatorCode == normalized && u.IsActive, ct);
+
+        if (user?.PinHash is null) return null;
+        return BCrypt.Net.BCrypt.Verify(pin, user.PinHash) ? user : null;
     }
 
     /// <summary>IP de origem — atrás do proxy vem no X-Forwarded-For.</summary>

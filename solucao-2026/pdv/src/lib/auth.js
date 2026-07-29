@@ -20,6 +20,16 @@ export const auth = {
     localStorage.removeItem(KEY_REFRESH);
     localStorage.removeItem(KEY_USER);
   },
+
+  /**
+   * Troca de turno: outro operador assume o caixa sem sair do aplicativo.
+   * Mantém a instalação autenticada; só o token do turno e o usuário mudam.
+   */
+  replaceSession: ({ accessToken, user }) => {
+    localStorage.setItem(KEY_ACCESS, accessToken);
+    localStorage.setItem(KEY_USER, JSON.stringify(user));
+    localStorage.removeItem(KEY_REFRESH); // sessão de turno não renova sozinha
+  },
 };
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5160';

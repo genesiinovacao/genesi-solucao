@@ -39,6 +39,7 @@ export default function Settings() {
         email: data.email || null,
         address: data.address || null,
         dailySalesTarget: Number(data.dailySalesTarget) || 0,
+        maxDiscountPercent: Number(data.maxDiscountPercent) || 0,
         taxRegime: data.taxRegime,
         logoEmoji: data.logoEmoji || null,
       };
@@ -87,6 +88,18 @@ export default function Settings() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Desconto máximo sem supervisor (%)
+              </label>
+              <input type="number" min="0" max="100" step="0.5"
+                     value={data.maxDiscountPercent ?? 10}
+                     onChange={(e) => setData({ ...data, maxDiscountPercent: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <p className="text-xs text-slate-400 mt-1">
+                No PDV, desconto acima disso pede código e PIN de um gerente.
+              </p>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ</label>
               <input type="text" value={formatDoc(data.cnpj)} disabled

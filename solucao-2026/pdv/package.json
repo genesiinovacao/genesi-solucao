@@ -1,6 +1,6 @@
 {
   "name": "solucao-pdv",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "SOLUÇÃO 2026 — Ponto de Venda offline-first (Electron + SQLite)",
   "main": "electron/main.cjs",

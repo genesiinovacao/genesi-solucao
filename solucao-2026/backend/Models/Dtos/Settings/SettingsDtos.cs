@@ -11,6 +11,7 @@ public record TenantSettingsDto(
     string? Email,
     string? Address,
     decimal DailySalesTarget,
+    decimal MaxDiscountPercent,
     string TaxRegime,
     string? LogoEmoji,
     string? LogoBase64,
@@ -26,5 +27,6 @@ public record UpdateTenantSettingsRequest(
     string? Email,
     string? Address,
     [Range(0, 9999999.99)] decimal DailySalesTarget,
+    [Range(0, 100)] decimal MaxDiscountPercent,
     string TaxRegime,
     string? LogoEmoji);

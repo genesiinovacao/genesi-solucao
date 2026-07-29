@@ -34,7 +34,30 @@ public class UsersController : ControllerBase
     }
 
     private static TeamUserDto ToDto(User u) =>
-        new(u.Id, u.Name, u.Email, u.Role, u.IsActive, u.LastLoginAt, u.CreatedAt);
+        new(u.Id, u.Name, u.Email, u.Role, u.IsActive, u.OperatorCode,
+            !string.IsNullOrEmpty(u.PinHash), u.LastLoginAt, u.CreatedAt);
+
+    /// <summary>Código: 2 a 10 caracteres alfanuméricos, sem espaço.</summary>
+    private static string? NormalizeCode(string? code)
+    {
+        var c = code?.Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(c) ? null : c;
+    }
+
+    private static string? ValidateCodeAndPin(string? code, string? pin, bool pinRequired = false)
+    {
+        if (code is not null && (code.Length < 2 || code.Length > 10 || !code.All(char.IsLetterOrDigit)))
+            return "Código do operador: 2 a 10 letras ou números, sem espaços.";
+        if (!string.IsNullOrEmpty(pin) && (pin.Length is < 4 or > 8 || !pin.All(char.IsDigit)))
+            return "PIN: 4 a 8 dígitos numéricos.";
+        if (pinRequired && string.IsNullOrEmpty(pin))
+            return "Informe o PIN.";
+        return null;
+    }
+
+    /// <summary>Código do operador não pode repetir dentro da loja.</summary>
+    private async Task<bool> CodeTakenAsync(string code, Guid exceptUserId, CancellationToken ct) =>
+        await _db.Users.AnyAsync(u => u.OperatorCode == code && u.Id != exceptUserId, ct);
 
     [HttpGet]
     public async Task<ActionResult<List<TeamUserDto>>> List(CancellationToken ct)
@@ -55,6 +78,12 @@ public class UsersController : ControllerBase
         if (_tenant.TenantId is not { } tenantId) return Unauthorized();
         if (!Roles.Contains(req.Role))
             return BadRequest(new { error = $"Papel inválido. Opções: {string.Join(", ", Roles)}" });
+
+        var code = NormalizeCode(req.OperatorCode);
+        if (ValidateCodeAndPin(code, req.Pin) is { } codeError)
+            return BadRequest(new { error = codeError });
+        if (code is not null && await CodeTakenAsync(code, Guid.Empty, ct))
+            return Conflict(new { error = $"O código {code} já está em uso nesta loja." });
 
         var email = req.Email.Trim();
 
@@ -77,6 +106,8 @@ public class UsersController : ControllerBase
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
             Role = req.Role,
             IsActive = true,
+            OperatorCode = code,
+            PinHash = string.IsNullOrEmpty(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -111,10 +142,17 @@ public class UsersController : ControllerBase
                 return BadRequest(new { error = "Este é o único admin ativo da loja — promova outro usuário antes." });
         }
 
+        var code = NormalizeCode(req.OperatorCode);
+        if (ValidateCodeAndPin(code, null) is { } codeError)
+            return BadRequest(new { error = codeError });
+        if (code is not null && await CodeTakenAsync(code, id, ct))
+            return Conflict(new { error = $"O código {code} já está em uso nesta loja." });
+
         var deactivated = u.IsActive && !req.IsActive;
         u.Name = req.Name.Trim();
         u.Role = req.Role;
         u.IsActive = req.IsActive;
+        u.OperatorCode = code;
         u.UpdatedAt = DateTime.UtcNow;
 
         _audit.Log("user.update", "user", u.Id, new { role = u.Role, active = u.IsActive });
@@ -152,6 +190,27 @@ public class UsersController : ControllerBase
         _audit.Log("user.password_reset", "user", u.Id, new { sessionsRevoked = tokens.Count });
         await _db.SaveChangesAsync(ct);
         _log.LogInformation("Senha redefinida para {Email}; {N} sessão(ões) revogada(s)", u.Email, tokens.Count);
+        return Ok(ToDto(u));
+    }
+
+    /// <summary>Define, troca ou remove o PIN de caixa do usuário.</summary>
+    [HttpPost("{id:guid}/pin")]
+    public async Task<ActionResult<TeamUserDto>> SetPin(Guid id, [FromBody] SetPinRequest req, CancellationToken ct)
+    {
+        if (_tenant.Role != "admin") return Forbid();
+        if (ValidateCodeAndPin(null, req.Pin) is { } error)
+            return BadRequest(new { error });
+
+        var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (u is null || u.Role == "superadmin") return NotFound();
+
+        u.PinHash = string.IsNullOrEmpty(req.Pin) ? null : BCrypt.Net.BCrypt.HashPassword(req.Pin);
+        u.UpdatedAt = DateTime.UtcNow;
+
+        _audit.Log(string.IsNullOrEmpty(req.Pin) ? "user.pin_remove" : "user.pin_set", "user", u.Id);
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("PIN {Acao} para {Email}", string.IsNullOrEmpty(req.Pin) ? "removido" : "definido", u.Email);
         return Ok(ToDto(u));
     }
 
