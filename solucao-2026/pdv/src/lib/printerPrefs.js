@@ -8,6 +8,9 @@ const defaults = {
   auto: false,
   deviceName: '',
   copies: 1,
+  // Largura da bobina: 58mm (384 dots/linha) ou 80mm (576 dots/linha).
+  // O autoteste da impressora informa esse número.
+  paperWidth: 80,
 };
 
 export const printerPrefs = {

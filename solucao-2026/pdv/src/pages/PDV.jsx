@@ -436,9 +436,10 @@ export default function PDV() {
       if (prefs.silent && prefs.auto) {
         window.pdv.printReceiptSilent({
           sale,
-          tenantName: user?.tenantName,
+          tenantName: storeName || user?.tenantName,
           deviceName: prefs.deviceName || undefined,
           copies: prefs.copies || 1,
+          paperWidth: prefs.paperWidth || 80,
         }).then((r) => {
           if (!r.ok) showToast(`Impressora: ${r.error}`, 'error');
         });

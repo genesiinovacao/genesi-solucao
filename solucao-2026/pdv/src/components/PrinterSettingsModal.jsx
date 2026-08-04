@@ -49,6 +49,7 @@ export default function PrinterSettingsModal({ onClose }) {
       tenantName: 'SOLUÇÃO 2026 — TESTE',
       deviceName: prefs.deviceName || undefined,
       copies: prefs.copies,
+      paperWidth: prefs.paperWidth,
     });
     setTestStatus(r.ok ? '✓ Enviado para impressora.' : `⚠️ ${r.error}`);
   };
@@ -106,6 +107,30 @@ export default function PrinterSettingsModal({ onClose }) {
                 <div className="text-xs text-slate-400">Dispara assim que a venda for confirmada.</div>
               </div>
             </label>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              Largura da bobina
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[58, 80].map((w) => (
+                <button key={w} type="button"
+                        onClick={() => setPrefs({ ...prefs, paperWidth: w })}
+                        className={`py-2.5 rounded-lg text-sm border-2 transition-colors ${
+                          Number(prefs.paperWidth) === w
+                            ? 'border-blue-500 bg-blue-500/15 text-white font-semibold'
+                            : 'border-slate-700 text-slate-300 hover:border-slate-600'}`}>
+                  {w} mm
+                  <span className="block text-[10px] text-slate-400">
+                    {w === 58 ? '384 dots/linha' : '576 dots/linha'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              O autoteste da impressora (ligar segurando o avanço de papel) mostra esse número.
+            </p>
           </div>
 
           <div>

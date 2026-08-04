@@ -20,16 +20,37 @@ function escapeHtml(s) {
   ));
 }
 
-function buildReceiptHtml({ sale, tenantName }) {
+function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
-  const itemsHtml = sale.items.map((i) => `
-    <tr>
-      <td>${escapeHtml(i.productName)}</td>
-      <td class="r">${i.quantity}</td>
-      <td class="r">${Number(i.unitPrice).toFixed(2)}</td>
-      <td class="r">${Number(i.totalPrice).toFixed(2)}</td>
-    </tr>
-  `).join('');
+
+  // 58mm imprime 384 dots (~48mm úteis); 80mm imprime 576 (~72mm).
+  const narrow = Number(paperWidth) === 58;
+  const pageWidth = narrow ? '58mm' : '80mm';
+  const contentWidth = narrow ? '48mm' : '76mm';
+  const baseFont = narrow ? 10 : 12;
+
+  // Em 58mm não cabem 4 colunas: o item ocupa duas linhas
+  const itemsHtml = narrow
+    ? sale.items.map((i) => `
+        <div class="item">
+          <div class="name">${escapeHtml(i.productName)}</div>
+          <div class="row small">
+            <span>${i.quantity} x ${Number(i.unitPrice).toFixed(2)}</span>
+            <span class="b">${Number(i.totalPrice).toFixed(2)}</span>
+          </div>
+        </div>
+      `).join('')
+    : `<table>
+        <thead><tr><th>ITEM</th><th class="r">QT</th><th class="r">VL</th><th class="r">TOTAL</th></tr></thead>
+        <tbody>${sale.items.map((i) => `
+          <tr>
+            <td>${escapeHtml(i.productName)}</td>
+            <td class="r">${i.quantity}</td>
+            <td class="r">${Number(i.unitPrice).toFixed(2)}</td>
+            <td class="r">${Number(i.totalPrice).toFixed(2)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
 
   const payments = (sale.payments && sale.payments.length > 0)
     ? sale.payments
@@ -38,25 +59,28 @@ function buildReceiptHtml({ sale, tenantName }) {
     <div class="row"><span>&nbsp;&nbsp;${escapeHtml(methodLabels[p.method] || p.method)}</span><span>${brl(p.amount)}</span></div>
   `).join('');
 
-  // CSS limitado a 80mm (302px). page-break: avoid; @page sem margens.
+  // Largura do papel manda no layout: @page sem margens para a térmica
+  // não reservar borda, e conteúdo limitado à área realmente impressa.
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <style>
-  @page { size: 80mm auto; margin: 0; }
+  @page { size: ${pageWidth} auto; margin: 0; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: ui-monospace, "Courier New", monospace; font-size: 12px; color: #000; background: #fff; }
-  .receipt { width: 76mm; padding: 4mm 2mm; }
+  body { font-family: ui-monospace, "Courier New", monospace; font-size: ${baseFont}px; color: #000; background: #fff; }
+  .receipt { width: ${contentWidth}; padding: ${narrow ? '3mm 1mm' : '4mm 2mm'}; }
   .center { text-align: center; }
   .b { font-weight: 700; }
-  .big { font-size: 14px; }
-  .small { font-size: 10px; color: #444; }
-  .hr { border-top: 1px dashed #000; margin: 6px 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .big { font-size: ${baseFont + 2}px; }
+  .small { font-size: ${baseFont - 2}px; color: #444; }
+  .hr { border-top: 1px dashed #000; margin: ${narrow ? '4px' : '6px'} 0; }
+  table { width: 100%; border-collapse: collapse; font-size: ${baseFont - 1}px; }
   th { border-bottom: 1px solid #000; text-align: left; }
   td.r, th.r { text-align: right; }
   .row { display: flex; justify-content: space-between; }
-  .total { font-size: 13px; font-weight: 700; }
+  .total { font-size: ${baseFont + 1}px; font-weight: 700; }
+  .item { margin-bottom: 3px; }
+  .item .name { word-break: break-word; }
 </style>
 </head><body>
   <div class="receipt">
@@ -68,10 +92,7 @@ function buildReceiptHtml({ sale, tenantName }) {
     ${sale.customerName ? `<div class="small">Cliente: ${escapeHtml(sale.customerName)}</div>` : ''}
     <div class="hr"></div>
 
-    <table>
-      <thead><tr><th>ITEM</th><th class="r">QT</th><th class="r">VL</th><th class="r">TOTAL</th></tr></thead>
-      <tbody>${itemsHtml}</tbody>
-    </table>
+    ${itemsHtml}
 
     <div class="hr"></div>
     <div class="row"><span>Subtotal</span><span>${brl(sale.subtotal)}</span></div>
@@ -91,14 +112,14 @@ function buildReceiptHtml({ sale, tenantName }) {
 }
 
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
-function printSilent({ sale, tenantName, deviceName, copies = 1 }) {
+function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80 }) {
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       show: false,
       width: 320, height: 600,
       webPreferences: { offscreen: false, sandbox: true },
     });
-    const html = buildReceiptHtml({ sale, tenantName });
+    const html = buildReceiptHtml({ sale, tenantName, paperWidth });
 
     win.webContents.once('did-finish-load', () => {
       const opts = {
