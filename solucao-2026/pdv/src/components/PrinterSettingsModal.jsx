@@ -53,32 +53,10 @@ export default function PrinterSettingsModal({ onClose }) {
     payments: [{ method: 'cash', amount: 10 }],
   });
 
-  // Diagnóstico 1: imprime abrindo a janela do Windows.
-  // Funcionando aqui, o problema está no modo silencioso.
-  const testWithDialog = async () => {
-    setTestStatus('Abrindo a janela de impressão…');
-    const r = await window.pdv.printReceiptDialog({
-      sale: buildFakeSale(),
-      tenantName: 'SOLUÇÃO 2026 — TESTE',
-      deviceName: prefs.deviceName || undefined,
-      copies: prefs.copies,
-      paperWidth: prefs.paperWidth,
-      printMode: prefs.printMode,
-    });
-    setTestStatus(r.ok ? '✓ Enviado pela janela do Windows.' : `⚠️ ${r.error}`);
-  };
-
-  // Diagnóstico 2: gera o cupom em PDF na área de trabalho.
-  // PDF correto = a montagem do cupom está boa, o problema é o driver.
-  const testToPdf = async () => {
-    setTestStatus('Gerando PDF…');
-    const r = await window.pdv.saveReceiptPdf({
-      sale: buildFakeSale(),
-      tenantName: 'SOLUÇÃO 2026 — TESTE',
-      paperWidth: prefs.paperWidth,
-    });
-    setTestStatus(r.ok ? `✓ PDF salvo na área de trabalho: ${r.path}` : `⚠️ ${r.error}`);
-  };
+  // Os testes de diagnóstico (imprimir pela janela do Windows e gerar PDF do
+  // cupom) saíram da tela. Os canais continuam no processo principal
+  // (print:receipt-dialog e print:receipt-pdf) para reativar rapidamente se
+  // alguma impressora de cliente voltar a dar trabalho.
 
   const testPrint = async () => {
     // Salva antes de testar: a venda real lê do disco, e testar com uma
@@ -184,32 +162,6 @@ export default function PrinterSettingsModal({ onClose }) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-              Modo de impressão
-            </label>
-            <div className="space-y-1.5">
-              {[
-                { v: 1, t: 'Margem zero', d: 'Funciona na maioria. Comece por aqui.' },
-                { v: 2, t: 'Margem zero + página exata', d: 'Se o modo 1 avançar papel demais.' },
-                { v: 3, t: 'Deixar o driver decidir', d: 'Se os outros saírem em branco ou cortados.' },
-              ].map((m) => (
-                <button key={m.v} type="button"
-                        onClick={() => setPrefs({ ...prefs, printMode: m.v })}
-                        className={`w-full text-left px-3 py-2 rounded-lg border-2 transition-colors ${
-                          Number(prefs.printMode) === m.v
-                            ? 'border-blue-500 bg-blue-500/15'
-                            : 'border-slate-700 hover:border-slate-600'}`}>
-                  <div className="text-sm text-white font-medium">{m.t}</div>
-                  <div className="text-[11px] text-slate-400">{m.d}</div>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              Teste os três e deixe marcado o que imprimir certo nesta impressora.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
               Cópias
             </label>
             <input type="number" min="1" max="5" value={prefs.copies}
@@ -235,21 +187,6 @@ export default function PrinterSettingsModal({ onClose }) {
             </button>
           </div>
 
-          <div className="border-t border-slate-800 pt-3">
-            <p className="text-[11px] text-slate-500 mb-2">
-              Não imprimiu? Use os testes abaixo para descobrir onde está o problema.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={testWithDialog}
-                      className="flex-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs">
-                🪟 Testar com janela do Windows
-              </button>
-              <button onClick={testToPdf}
-                      className="flex-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs">
-                📄 Gerar PDF do cupom
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

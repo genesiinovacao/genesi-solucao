@@ -302,4 +302,5 @@ function registerPrintIpc() {
   });
 }
 
-module.exports = { registerPrintIpc };
+// buildReceiptHtml exportado para permitir validar o cupom fora do Electron
+module.exports = { registerPrintIpc, buildReceiptHtml, resolvePaperWidth };
