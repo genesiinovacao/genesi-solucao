@@ -78,7 +78,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   /* Térmica não tem meio-tom: cinza e bordas suavizadas viram falhas.
      Tudo em preto puro, sem antialias e com traço mais firme. */
   @page { size: ${narrow ? '58mm' : '80mm'} auto; margin: 0; }
-  html, body { margin: 0; padding: 0; width: ${printableWidth}; }
+  /* Sem largura fixa aqui: ela impedia a renderização na impressão */
+  html, body { margin: 0; padding: 0; }
   body {
     font-family: "Courier New", ui-monospace, monospace;
     font-size: ${baseFont}px;
@@ -90,7 +91,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   * { color: #000 !important; }
   /* Limitado à área imprimível: nada pode ultrapassar a borda do papel */
   .receipt { width: ${printableWidth}; max-width: ${printableWidth};
-             padding: 0; overflow: hidden; box-sizing: border-box; }
+             padding: ${narrow ? '2mm 1mm' : '4mm 2mm'};
+             overflow: hidden; box-sizing: border-box; }
   .receipt * { max-width: 100%; overflow-wrap: anywhere; }
   .center { text-align: center; }
   .b { font-weight: 700; }
