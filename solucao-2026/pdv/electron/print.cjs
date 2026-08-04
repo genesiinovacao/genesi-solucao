@@ -23,6 +23,19 @@ function escapeHtml(s) {
   ));
 }
 
+/**
+ * Largura real da bobina. O nome da impressora é a fonte mais confiável:
+ * "POS-58", "58mm" etc. dizem o formato do equipamento, enquanto a opção da
+ * tela pode estar errada — e um cupom mais largo que o papel perde tudo do
+ * lado direito (valores, totais e forma de pagamento).
+ */
+function resolvePaperWidth(deviceName, configured) {
+  const n = String(deviceName || '').toLowerCase();
+  if (/\b58\b|58mm|pos-?58/.test(n)) return 58;
+  if (/\b80\b|80mm|pos-?80/.test(n)) return 80;
+  return Number(configured) === 58 ? 58 : 80;
+}
+
 function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
 
@@ -32,6 +45,9 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   // cupom de 80mm numa bobina de 58mm perdia tudo do lado direito.
   const narrow = Number(paperWidth) === 58;
   const baseFont = narrow ? 10 : 12;
+  // Área realmente impressa: 58mm imprime 48mm; 80mm imprime 72mm.
+  // 2mm de folga para a borda não ser cortada.
+  const printableWidth = narrow ? '46mm' : '70mm';
 
   // Duas linhas por item em qualquer largura: nome longo quebra dentro da
   // própria linha em vez de alargar a página e empurrar os valores para fora
@@ -61,8 +77,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 <style>
   /* Térmica não tem meio-tom: cinza e bordas suavizadas viram falhas.
      Tudo em preto puro, sem antialias e com traço mais firme. */
-  @page { size: auto; margin: 0; }
-  html, body { margin: 0; padding: 0; width: 100%; }
+  @page { size: ${narrow ? '58mm' : '80mm'} auto; margin: 0; }
+  html, body { margin: 0; padding: 0; width: ${printableWidth}; }
   body {
     font-family: "Courier New", ui-monospace, monospace;
     font-size: ${baseFont}px;
@@ -72,9 +88,9 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     text-rendering: geometricPrecision;
   }
   * { color: #000 !important; }
-  /* Fluido: ocupa o papel real, seja 58mm ou 80mm */
-  .receipt { width: 100%; max-width: 100%; padding: ${narrow ? '1mm' : '2mm'};
-             overflow: hidden; box-sizing: border-box; }
+  /* Limitado à área imprimível: nada pode ultrapassar a borda do papel */
+  .receipt { width: ${printableWidth}; max-width: ${printableWidth};
+             padding: 0; overflow: hidden; box-sizing: border-box; }
   .receipt * { max-width: 100%; overflow-wrap: anywhere; }
   .center { text-align: center; }
   .b { font-weight: 700; }
@@ -120,6 +136,9 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
 function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true, printMode = 1 }) {
+  // O nome da impressora manda: evita cupom largo demais quando a opção da
+  // tela não corresponde ao equipamento instalado.
+  paperWidth = resolvePaperWidth(deviceName, paperWidth);
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       show: false,
@@ -175,7 +194,7 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
       fs.writeFileSync(dbg, html, 'utf8');
       fs.writeFileSync(
         path.join(os.tmpdir(), `solucao-ultimo-cupom-${tag}.json`),
-        JSON.stringify({ paperWidth, printMode, copies, deviceName, silent, sale }, null, 2),
+        JSON.stringify({ paperWidthUsado: paperWidth, printMode, copies, deviceName, silent, sale }, null, 2),
         'utf8'
       );
     } catch { /* diagnóstico nunca impede a impressão */ }
