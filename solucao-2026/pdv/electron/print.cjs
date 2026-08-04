@@ -119,7 +119,7 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 }
 
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
-function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true }) {
+function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true, printMode = 1 }) {
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       show: false,
@@ -132,27 +132,31 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
     // estar pronto no did-finish-load, e o driver receberia página vazia.
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
-        // O driver térmico traz 25,4mm de margem padrão — numa bobina de 58mm
-        // isso empurra o cupom para fora do papel. 'none' não bastou; aqui vão
-        // margens explícitas em zero e o tamanho exato da página.
+        // Cada driver térmico reage de um jeito a tamanho de página e margem.
+        // Em vez de impor um único caminho, o modo é escolhido na tela:
+        //   1 = margens zeradas, papel do driver  (o que funcionou fora do PDV)
+        //   2 = margens zeradas + página no tamanho exato do conteúdo
+        //   3 = nada sobreposto: exatamente como o driver está configurado
         const narrow = Number(paperWidth) === 58;
-        let heightPx = 600;
-        try {
-          heightPx = await win.webContents.executeJavaScript(
-            'Math.ceil(document.querySelector(".receipt").getBoundingClientRect().height)'
-          );
-        } catch { /* mantém o padrão */ }
+        const opts = { silent, printBackground: false, copies };
 
-        const opts = {
-          silent,
-          printBackground: false,
-          copies,
-          margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
-          pageSize: {
-            width: narrow ? 58000 : 80000,                       // microns
+        if (printMode === 1 || printMode === 2) {
+          opts.margins = { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 };
+        }
+
+        if (printMode === 2) {
+          let heightPx = 600;
+          try {
+            heightPx = await win.webContents.executeJavaScript(
+              'Math.ceil(document.querySelector(".receipt").getBoundingClientRect().height)'
+            );
+          } catch { /* mantém o padrão */ }
+          opts.pageSize = {
+            width: narrow ? 58000 : 80000,                     // microns
             height: Math.ceil((heightPx + 24) * (25400 / 96)),
-          },
-        };
+          };
+        }
+
         if (deviceName) opts.deviceName = deviceName;
 
         win.webContents.print(opts, (success, failureReason) => {

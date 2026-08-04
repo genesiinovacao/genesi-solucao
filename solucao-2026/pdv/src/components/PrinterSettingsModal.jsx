@@ -63,6 +63,7 @@ export default function PrinterSettingsModal({ onClose }) {
       deviceName: prefs.deviceName || undefined,
       copies: prefs.copies,
       paperWidth: prefs.paperWidth,
+      printMode: prefs.printMode,
     });
     setTestStatus(r.ok ? '✓ Enviado pela janela do Windows.' : `⚠️ ${r.error}`);
   };
@@ -99,6 +100,7 @@ export default function PrinterSettingsModal({ onClose }) {
       deviceName: prefs.deviceName || undefined,
       copies: prefs.copies,
       paperWidth: prefs.paperWidth,
+      printMode: prefs.printMode,
     });
     setTestStatus(r.ok ? '✓ Enviado para impressora.' : `⚠️ ${r.error}`);
   };
@@ -185,6 +187,32 @@ export default function PrinterSettingsModal({ onClose }) {
                 ⚠️ Em bobina de 58mm, esta opção corta os valores do lado direito.
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              Modo de impressão
+            </label>
+            <div className="space-y-1.5">
+              {[
+                { v: 1, t: 'Margem zero', d: 'Funciona na maioria. Comece por aqui.' },
+                { v: 2, t: 'Margem zero + página exata', d: 'Se o modo 1 avançar papel demais.' },
+                { v: 3, t: 'Deixar o driver decidir', d: 'Se os outros saírem em branco ou cortados.' },
+              ].map((m) => (
+                <button key={m.v} type="button"
+                        onClick={() => setPrefs({ ...prefs, printMode: m.v })}
+                        className={`w-full text-left px-3 py-2 rounded-lg border-2 transition-colors ${
+                          Number(prefs.printMode) === m.v
+                            ? 'border-blue-500 bg-blue-500/15'
+                            : 'border-slate-700 hover:border-slate-600'}`}>
+                  <div className="text-sm text-white font-medium">{m.t}</div>
+                  <div className="text-[11px] text-slate-400">{m.d}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Teste os três e deixe marcado o que imprimir certo nesta impressora.
+            </p>
           </div>
 
           <div>

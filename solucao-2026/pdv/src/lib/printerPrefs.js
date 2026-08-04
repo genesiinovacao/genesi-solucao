@@ -11,6 +11,9 @@ const defaults = {
   // Largura da bobina: 58mm (384 dots/linha) ou 80mm (576 dots/linha).
   // O autoteste da impressora informa esse número.
   paperWidth: 80,
+  // Como a página é enviada ao driver. Varia por modelo — ver o modal.
+  // 1 = margem zero (padrão) · 2 = margem zero + página exata · 3 = driver decide
+  printMode: 1,
 };
 
 export const printerPrefs = {

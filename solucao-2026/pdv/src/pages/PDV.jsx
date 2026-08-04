@@ -440,6 +440,7 @@ export default function PDV() {
           deviceName: prefs.deviceName || undefined,
           copies: prefs.copies || 1,
           paperWidth: prefs.paperWidth || 80,
+          printMode: prefs.printMode || 1,
         }).then((r) => {
           if (!r.ok) showToast(`Impressora: ${r.error}`, 'error');
         });
