@@ -85,17 +85,10 @@ export default function PrinterSettingsModal({ onClose }) {
     // configuração não salva imprimia diferente do cupom de verdade.
     printerPrefs.set(prefs);
     setTestStatus('Imprimindo...');
-    const fakeSale = {
-      offlineSyncId: 'TEST' + Date.now(),
-      saleDateIso: new Date().toISOString(),
-      customerName: 'TESTE DE IMPRESSORA',
-      subtotal: 10, discountAmount: 0, totalAmount: 10, changeAmount: 0,
-      paymentMethod: 'cash',
-      items: [{ productName: 'Item de teste', quantity: 1, unitPrice: 10, totalPrice: 10 }],
-      payments: [{ method: 'cash', amount: 10 }],
-    };
+    // Mesmo cupom dos demais testes: dois itens e nome longo, como numa
+    // venda real. Um exemplo curto escondia os defeitos de largura.
     const r = await window.pdv.printReceiptSilent({
-      sale: fakeSale,
+      sale: buildFakeSale(),
       tenantName: 'SOLUÇÃO 2026 — TESTE',
       deviceName: prefs.deviceName || undefined,
       copies: prefs.copies,

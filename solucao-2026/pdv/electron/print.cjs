@@ -26,11 +26,11 @@ function escapeHtml(s) {
 function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
 
-  // 58mm imprime 384 dots (~48mm úteis); 80mm imprime 576 (~72mm).
+  // A largura escolhida define só a densidade do texto. O cupom em si é
+  // fluido (100% da página): assim ele preenche o papel que a impressora
+  // realmente tem, mesmo se a configuração estiver errada — antes, um
+  // cupom de 80mm numa bobina de 58mm perdia tudo do lado direito.
   const narrow = Number(paperWidth) === 58;
-  const pageWidth = narrow ? '58mm' : '80mm';
-  // 58mm imprime 48mm úteis; 46mm dá folga para o driver não cortar a borda
-  const contentWidth = narrow ? '46mm' : '76mm';
   const baseFont = narrow ? 10 : 12;
 
   // Duas linhas por item em qualquer largura: nome longo quebra dentro da
@@ -61,8 +61,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 <style>
   /* Térmica não tem meio-tom: cinza e bordas suavizadas viram falhas.
      Tudo em preto puro, sem antialias e com traço mais firme. */
-  @page { size: ${pageWidth} auto; margin: 0; }
-  html, body { margin: 0; padding: 0; }
+  @page { size: auto; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 100%; }
   body {
     font-family: "Courier New", ui-monospace, monospace;
     font-size: ${baseFont}px;
@@ -72,8 +72,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     text-rendering: geometricPrecision;
   }
   * { color: #000 !important; }
-  /* max-width impede que qualquer conteúdo alargue a página */
-  .receipt { width: ${contentWidth}; max-width: ${contentWidth}; padding: ${narrow ? '2mm 1mm' : '4mm 2mm'};
+  /* Fluido: ocupa o papel real, seja 58mm ou 80mm */
+  .receipt { width: 100%; max-width: 100%; padding: ${narrow ? '1mm' : '2mm'};
              overflow: hidden; box-sizing: border-box; }
   .receipt * { max-width: 100%; overflow-wrap: anywhere; }
   .center { text-align: center; }
