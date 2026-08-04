@@ -28,6 +28,12 @@ export default function PrinterSettingsModal({ onClose }) {
     // eslint-disable-next-line
   }, []);
 
+  // Persiste a cada mudança: assim o cupom da venda usa exatamente o que
+  // está na tela, sem depender de lembrar de clicar em Salvar.
+  useEffect(() => {
+    if (!loading) printerPrefs.set(prefs);
+  }, [prefs, loading]);
+
   const save = () => {
     printerPrefs.set(prefs);
     onClose?.();
@@ -70,6 +76,9 @@ export default function PrinterSettingsModal({ onClose }) {
   };
 
   const testPrint = async () => {
+    // Salva antes de testar: a venda real lê do disco, e testar com uma
+    // configuração não salva imprimia diferente do cupom de verdade.
+    printerPrefs.set(prefs);
     setTestStatus('Imprimindo...');
     const fakeSale = {
       offlineSyncId: 'TEST' + Date.now(),

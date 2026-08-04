@@ -68,20 +68,30 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 <html><head>
 <meta charset="utf-8">
 <style>
+  /* Térmica não tem meio-tom: cinza e bordas suavizadas viram falhas.
+     Tudo em preto puro, sem antialias e com traço mais firme. */
   @page { size: ${pageWidth} auto; margin: 0; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: ui-monospace, "Courier New", monospace; font-size: ${baseFont}px; color: #000; background: #fff; }
-  .receipt { width: ${contentWidth}; padding: ${narrow ? '3mm 1mm' : '4mm 2mm'}; }
+  body {
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: ${baseFont}px;
+    color: #000; background: #fff;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    text-rendering: geometricPrecision;
+  }
+  * { color: #000 !important; }
+  .receipt { width: ${contentWidth}; padding: ${narrow ? '2mm 1mm' : '4mm 2mm'}; }
   .center { text-align: center; }
   .b { font-weight: 700; }
-  .big { font-size: ${baseFont + 2}px; }
-  .small { font-size: ${baseFont - 2}px; color: #444; }
-  .hr { border-top: 1px dashed #000; margin: ${narrow ? '4px' : '6px'} 0; }
+  .big { font-size: ${baseFont + 2}px; font-weight: 700; }
+  .small { font-size: ${baseFont - 1}px; }
+  .hr { border-top: 1px solid #000; margin: ${narrow ? '4px' : '6px'} 0; }
   table { width: 100%; border-collapse: collapse; font-size: ${baseFont - 1}px; }
   th { border-bottom: 1px solid #000; text-align: left; }
   td.r, th.r { text-align: right; }
-  .row { display: flex; justify-content: space-between; }
-  .total { font-size: ${baseFont + 1}px; font-weight: 700; }
+  .row { display: flex; justify-content: space-between; gap: 4px; }
+  .total { font-size: ${baseFont + 2}px; font-weight: 700; }
   .item { margin-bottom: 3px; }
   .item .name { word-break: break-word; }
 </style>
