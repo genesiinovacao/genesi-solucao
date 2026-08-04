@@ -29,7 +29,8 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   // 58mm imprime 384 dots (~48mm úteis); 80mm imprime 576 (~72mm).
   const narrow = Number(paperWidth) === 58;
   const pageWidth = narrow ? '58mm' : '80mm';
-  const contentWidth = narrow ? '48mm' : '76mm';
+  // 58mm imprime 48mm úteis; 46mm dá folga para o driver não cortar a borda
+  const contentWidth = narrow ? '46mm' : '76mm';
   const baseFont = narrow ? 10 : 12;
 
   // Em 58mm não cabem 4 colunas: o item ocupa duas linhas
@@ -137,12 +138,27 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
     // Espera a renderização assentar: em janela oculta o layout pode não
     // estar pronto no did-finish-load, e o driver receberia página vazia.
     win.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
+      setTimeout(async () => {
+        // O driver térmico traz 25,4mm de margem padrão — numa bobina de 58mm
+        // isso empurra o cupom para fora do papel. 'none' não bastou; aqui vão
+        // margens explícitas em zero e o tamanho exato da página.
+        const narrow = Number(paperWidth) === 58;
+        let heightPx = 600;
+        try {
+          heightPx = await win.webContents.executeJavaScript(
+            'Math.ceil(document.querySelector(".receipt").getBoundingClientRect().height)'
+          );
+        } catch { /* mantém o padrão */ }
+
         const opts = {
           silent,
           printBackground: false,
           copies,
-          margins: { marginType: 'none' },
+          margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
+          pageSize: {
+            width: narrow ? 58000 : 80000,                       // microns
+            height: Math.ceil((heightPx + 24) * (25400 / 96)),
+          },
         };
         if (deviceName) opts.deviceName = deviceName;
 

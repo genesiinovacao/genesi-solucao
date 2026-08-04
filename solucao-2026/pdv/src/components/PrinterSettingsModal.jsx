@@ -176,6 +176,11 @@ export default function PrinterSettingsModal({ onClose }) {
             <p className="text-[11px] text-slate-400 mt-1.5">
               O autoteste da impressora (ligar segurando o avanço de papel) mostra esse número.
             </p>
+            {Number(prefs.paperWidth) === 80 && (
+              <p className="text-[11px] text-amber-400 mt-1">
+                ⚠️ Em bobina de 58mm, esta opção corta os valores do lado direito.
+              </p>
+            )}
           </div>
 
           <div>
