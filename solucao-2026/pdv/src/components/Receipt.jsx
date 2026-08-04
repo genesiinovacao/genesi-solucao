@@ -28,6 +28,10 @@ export default function Receipt({ sale, onClose, onPrint }) {
       tenantName: user?.tenantName,
       deviceName: prefs.deviceName || undefined,
       copies: prefs.copies || 1,
+      // Sem estes dois o cupom saía sempre em 80mm, ignorando o que está
+      // configurado — era a causa do corte nas vendas.
+      paperWidth: prefs.paperWidth || 80,
+      printMode: prefs.printMode || 1,
     });
     if (r.ok) {
       setSilentStatus('✓ Cupom enviado.');
