@@ -45,7 +45,11 @@ export default function PrinterSettingsModal({ onClose }) {
     customerName: 'TESTE DE IMPRESSORA',
     subtotal: 10, discountAmount: 0, totalAmount: 10, changeAmount: 0,
     paymentMethod: 'cash',
-    items: [{ productName: 'Item de teste', quantity: 1, unitPrice: 10, totalPrice: 10 }],
+    // Nome longo de propósito: é o caso que quebrava o cupom das vendas reais
+    items: [
+      { productName: 'Sardinha Coqueiro Tomate 125g', quantity: 2, unitPrice: 8, totalPrice: 16 },
+      { productName: 'Suco de Uva', quantity: 1, unitPrice: 10, totalPrice: 10 },
+    ],
     payments: [{ method: 'cash', amount: 10 }],
   });
 

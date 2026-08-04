@@ -33,28 +33,18 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   const contentWidth = narrow ? '46mm' : '76mm';
   const baseFont = narrow ? 10 : 12;
 
-  // Em 58mm não cabem 4 colunas: o item ocupa duas linhas
-  const itemsHtml = narrow
-    ? sale.items.map((i) => `
-        <div class="item">
-          <div class="name">${escapeHtml(i.productName)}</div>
-          <div class="row small">
-            <span>${i.quantity} x ${Number(i.unitPrice).toFixed(2)}</span>
-            <span class="b">${Number(i.totalPrice).toFixed(2)}</span>
-          </div>
-        </div>
-      `).join('')
-    : `<table>
-        <thead><tr><th>ITEM</th><th class="r">QT</th><th class="r">VL</th><th class="r">TOTAL</th></tr></thead>
-        <tbody>${sale.items.map((i) => `
-          <tr>
-            <td>${escapeHtml(i.productName)}</td>
-            <td class="r">${i.quantity}</td>
-            <td class="r">${Number(i.unitPrice).toFixed(2)}</td>
-            <td class="r">${Number(i.totalPrice).toFixed(2)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`;
+  // Duas linhas por item em qualquer largura: nome longo quebra dentro da
+  // própria linha em vez de alargar a página e empurrar os valores para fora
+  // do papel — que era o que acontecia com a tabela de 4 colunas.
+  const itemsHtml = sale.items.map((i) => `
+    <div class="item">
+      <div class="name">${escapeHtml(i.productName)}</div>
+      <div class="row">
+        <span>${i.quantity} x ${Number(i.unitPrice).toFixed(2)}</span>
+        <span class="b">${Number(i.totalPrice).toFixed(2)}</span>
+      </div>
+    </div>
+  `).join('');
 
   const payments = (sale.payments && sale.payments.length > 0)
     ? sale.payments
@@ -82,7 +72,10 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     text-rendering: geometricPrecision;
   }
   * { color: #000 !important; }
-  .receipt { width: ${contentWidth}; padding: ${narrow ? '2mm 1mm' : '4mm 2mm'}; }
+  /* max-width impede que qualquer conteúdo alargue a página */
+  .receipt { width: ${contentWidth}; max-width: ${contentWidth}; padding: ${narrow ? '2mm 1mm' : '4mm 2mm'};
+             overflow: hidden; box-sizing: border-box; }
+  .receipt * { max-width: 100%; overflow-wrap: anywhere; }
   .center { text-align: center; }
   .b { font-weight: 700; }
   .big { font-size: ${baseFont + 2}px; font-weight: 700; }
