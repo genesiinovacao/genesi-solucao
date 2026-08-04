@@ -2,7 +2,10 @@
 // Renderiza o cupom em uma BrowserWindow oculta usando HTML estático
 // gerado neste módulo (sem depender do React do renderer) e dispara a
 // impressão direto na impressora preferida — sem caixa de diálogo.
-const { BrowserWindow, ipcMain } = require('electron');
+const { BrowserWindow, ipcMain, app } = require('electron');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
   .format(Number(n) || 0);
@@ -112,50 +115,88 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 }
 
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
-function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80 }) {
+function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true }) {
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       show: false,
-      width: 320, height: 600,
+      width: 400, height: 800,
       webPreferences: { offscreen: false, sandbox: true },
     });
     const html = buildReceiptHtml({ sale, tenantName, paperWidth });
 
-    win.webContents.once('did-finish-load', async () => {
-      // Driver térmico não resolve "altura automática": sem um tamanho de
-      // página explícito ele imprime uma página mínima — o papel anda um
-      // pouco e para. Medimos o cupom renderizado e informamos o tamanho.
-      let heightPx = 600;
-      try {
-        heightPx = await win.webContents.executeJavaScript(
-          'Math.ceil(document.querySelector(".receipt").getBoundingClientRect().height)'
-        );
-      } catch { /* mantém o padrão */ }
+    // Espera a renderização assentar: em janela oculta o layout pode não
+    // estar pronto no did-finish-load, e o driver receberia página vazia.
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        const opts = {
+          silent,
+          printBackground: false,
+          copies,
+          margins: { marginType: 'none' },
+        };
+        if (deviceName) opts.deviceName = deviceName;
 
-      const PX_TO_MICRONS = 25400 / 96;          // 1px CSS = 1/96"
-      const narrow = Number(paperWidth) === 58;
-      const opts = {
-        silent: true,
-        printBackground: false,
-        copies,
-        margins: { marginType: 'none' },
-        pageSize: {
-          width: narrow ? 58000 : 80000,          // microns
-          // folga de 24px para a última linha não ser cortada
-          height: Math.ceil((heightPx + 24) * PX_TO_MICRONS),
-        },
-      };
-      if (deviceName) opts.deviceName = deviceName;
-
-      win.webContents.print(opts, (success, failureReason) => {
-        win.destroy();
-        if (success) resolve({ ok: true });
-        else reject(new Error(failureReason || 'Falha ao imprimir.'));
-      });
+        win.webContents.print(opts, (success, failureReason) => {
+          win.destroy();
+          if (success) resolve({ ok: true });
+          else reject(new Error(failureReason || 'Falha ao imprimir.'));
+        });
+      }, 400);
     });
 
-    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
-      .catch((err) => { win.destroy(); reject(err); });
+    // Arquivo temporário em vez de data: URL — alguns drivers recebem página
+    // vazia quando o documento vem de data URL.
+    const tmp = path.join(os.tmpdir(), `solucao-cupom-${Date.now()}.html`);
+    try {
+      fs.writeFileSync(tmp, html, 'utf8');
+      win.loadFile(tmp).catch((err) => { win.destroy(); reject(err); });
+      win.once('closed', () => { try { fs.unlinkSync(tmp); } catch { /* ok */ } });
+    } catch (err) {
+      win.destroy();
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Diagnóstico: gera o cupom em PDF na área de trabalho. Se o PDF sai certo,
+ * a renderização está boa e o problema é do driver/envio.
+ */
+function saveReceiptPdf({ sale, tenantName, paperWidth = 80 }) {
+  return new Promise((resolve, reject) => {
+    const win = new BrowserWindow({
+      show: false, width: 400, height: 800,
+      webPreferences: { offscreen: false, sandbox: true },
+    });
+    const html = buildReceiptHtml({ sale, tenantName, paperWidth });
+    const tmp = path.join(os.tmpdir(), `solucao-cupom-${Date.now()}.html`);
+    const out = path.join(app.getPath('desktop'), `cupom-teste-${paperWidth}mm.pdf`);
+
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        try {
+          const pdf = await win.webContents.printToPDF({
+            printBackground: false,
+            margins: { marginType: 'none' },
+          });
+          fs.writeFileSync(out, pdf);
+          win.destroy();
+          resolve({ ok: true, path: out });
+        } catch (err) {
+          win.destroy();
+          reject(err);
+        }
+      }, 400);
+    });
+
+    try {
+      fs.writeFileSync(tmp, html, 'utf8');
+      win.loadFile(tmp).catch((err) => { win.destroy(); reject(err); });
+      win.once('closed', () => { try { fs.unlinkSync(tmp); } catch { /* ok */ } });
+    } catch (err) {
+      win.destroy();
+      reject(err);
+    }
   });
 }
 
@@ -178,6 +219,26 @@ function registerPrintIpc() {
     try {
       await printSilent(payload);
       return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Diagnóstico: imprime abrindo a caixa de diálogo do Windows
+  ipcMain.handle('print:receipt-dialog', async (_e, payload) => {
+    try {
+      await printSilent({ ...payload, silent: false });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // Diagnóstico: salva o cupom em PDF na área de trabalho
+  ipcMain.handle('print:receipt-pdf', async (_e, payload) => {
+    try {
+      const r = await saveReceiptPdf(payload);
+      return { ok: true, path: r.path };
     } catch (err) {
       return { ok: false, error: err.message };
     }

@@ -33,6 +33,42 @@ export default function PrinterSettingsModal({ onClose }) {
     onClose?.();
   };
 
+  const buildFakeSale = () => ({
+    offlineSyncId: 'TEST' + Date.now(),
+    saleDateIso: new Date().toISOString(),
+    customerName: 'TESTE DE IMPRESSORA',
+    subtotal: 10, discountAmount: 0, totalAmount: 10, changeAmount: 0,
+    paymentMethod: 'cash',
+    items: [{ productName: 'Item de teste', quantity: 1, unitPrice: 10, totalPrice: 10 }],
+    payments: [{ method: 'cash', amount: 10 }],
+  });
+
+  // Diagnóstico 1: imprime abrindo a janela do Windows.
+  // Funcionando aqui, o problema está no modo silencioso.
+  const testWithDialog = async () => {
+    setTestStatus('Abrindo a janela de impressão…');
+    const r = await window.pdv.printReceiptDialog({
+      sale: buildFakeSale(),
+      tenantName: 'SOLUÇÃO 2026 — TESTE',
+      deviceName: prefs.deviceName || undefined,
+      copies: prefs.copies,
+      paperWidth: prefs.paperWidth,
+    });
+    setTestStatus(r.ok ? '✓ Enviado pela janela do Windows.' : `⚠️ ${r.error}`);
+  };
+
+  // Diagnóstico 2: gera o cupom em PDF na área de trabalho.
+  // PDF correto = a montagem do cupom está boa, o problema é o driver.
+  const testToPdf = async () => {
+    setTestStatus('Gerando PDF…');
+    const r = await window.pdv.saveReceiptPdf({
+      sale: buildFakeSale(),
+      tenantName: 'SOLUÇÃO 2026 — TESTE',
+      paperWidth: prefs.paperWidth,
+    });
+    setTestStatus(r.ok ? `✓ PDF salvo na área de trabalho: ${r.path}` : `⚠️ ${r.error}`);
+  };
+
   const testPrint = async () => {
     setTestStatus('Imprimindo...');
     const fakeSale = {
@@ -158,6 +194,22 @@ export default function PrinterSettingsModal({ onClose }) {
                     className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg text-sm">
               Salvar
             </button>
+          </div>
+
+          <div className="border-t border-slate-800 pt-3">
+            <p className="text-[11px] text-slate-500 mb-2">
+              Não imprimiu? Use os testes abaixo para descobrir onde está o problema.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={testWithDialog}
+                      className="flex-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs">
+                🪟 Testar com janela do Windows
+              </button>
+              <button onClick={testToPdf}
+                      className="flex-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs">
+                📄 Gerar PDF do cupom
+              </button>
+            </div>
           </div>
         </div>
       </div>
