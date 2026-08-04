@@ -167,6 +167,19 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
       }, 400);
     });
 
+    // Diagnóstico: guarda o último cupom gerado (HTML + parâmetros) para
+    // comparar o que sai no teste com o que sai na venda real.
+    try {
+      const tag = String(sale.offlineSyncId || '').startsWith('TEST') ? 'teste' : 'venda';
+      const dbg = path.join(os.tmpdir(), `solucao-ultimo-cupom-${tag}.html`);
+      fs.writeFileSync(dbg, html, 'utf8');
+      fs.writeFileSync(
+        path.join(os.tmpdir(), `solucao-ultimo-cupom-${tag}.json`),
+        JSON.stringify({ paperWidth, printMode, copies, deviceName, silent, sale }, null, 2),
+        'utf8'
+      );
+    } catch { /* diagnóstico nunca impede a impressão */ }
+
     // Arquivo temporário em vez de data: URL — alguns drivers recebem página
     // vazia quando o documento vem de data URL.
     const tmp = path.join(os.tmpdir(), `solucao-cupom-${Date.now()}.html`);
