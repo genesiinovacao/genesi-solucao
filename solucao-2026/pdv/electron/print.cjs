@@ -121,12 +121,29 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
     });
     const html = buildReceiptHtml({ sale, tenantName, paperWidth });
 
-    win.webContents.once('did-finish-load', () => {
+    win.webContents.once('did-finish-load', async () => {
+      // Driver térmico não resolve "altura automática": sem um tamanho de
+      // página explícito ele imprime uma página mínima — o papel anda um
+      // pouco e para. Medimos o cupom renderizado e informamos o tamanho.
+      let heightPx = 600;
+      try {
+        heightPx = await win.webContents.executeJavaScript(
+          'Math.ceil(document.querySelector(".receipt").getBoundingClientRect().height)'
+        );
+      } catch { /* mantém o padrão */ }
+
+      const PX_TO_MICRONS = 25400 / 96;          // 1px CSS = 1/96"
+      const narrow = Number(paperWidth) === 58;
       const opts = {
         silent: true,
         printBackground: false,
         copies,
         margins: { marginType: 'none' },
+        pageSize: {
+          width: narrow ? 58000 : 80000,          // microns
+          // folga de 24px para a última linha não ser cortada
+          height: Math.ceil((heightPx + 24) * PX_TO_MICRONS),
+        },
       };
       if (deviceName) opts.deviceName = deviceName;
 
