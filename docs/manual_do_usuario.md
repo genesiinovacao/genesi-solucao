@@ -4,6 +4,21 @@
 
 ---
 
+> [!WARNING]
+> **Documento histórico — descreve a v1.0 estática** (HTML + localStorage,
+> aberta pelo `index.html` na raiz do repositório). **Não** descreve o
+> **SOLUÇÃO 2026**, que é o produto em produção desde jul/2026 e tem outro
+> login, outras telas e outro PDV.
+>
+> Para o sistema atual:
+> - Visão geral e fluxos → [`solucao-2026/docs/ARQUITETURA.md`](../solucao-2026/docs/ARQUITETURA.md)
+> - Como subir e publicar → [`solucao-2026/README.md`](../solucao-2026/README.md)
+>
+> Um manual do usuário para o SOLUÇÃO 2026 ainda **não existe** e é uma
+> lacuna conhecida — este arquivo não serve para o lojista de hoje.
+
+---
+
 > [!IMPORTANT]
 > **Como abrir o sistema:** Acesse a pasta `Sistema de Varejo teste` e abra o arquivo **`index.html`** com qualquer navegador (Chrome, Edge, Firefox).
 

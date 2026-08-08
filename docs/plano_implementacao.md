@@ -3,6 +3,16 @@
 
 ---
 
+> [!WARNING]
+> **Documento histórico (mai/2026)** — é o plano original da **v1.0 estática**.
+> Mantido como registro da concepção do projeto; **não reflete** o que foi
+> construído no SOLUÇÃO 2026 nem serve de roadmap.
+>
+> Roadmap e pendências atuais estão em
+> [`solucao-2026/README.md`](../solucao-2026/README.md).
+
+---
+
 ## 1. Visão Geral do Projeto
 
 | Item | Descrição |

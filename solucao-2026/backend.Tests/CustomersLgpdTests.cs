@@ -35,6 +35,33 @@ public class CustomersLgpdTests
         return c;
     }
 
+    /// <summary>
+    /// Orçamento copia nome e telefone para imprimir no balcão. Anonimizar o
+    /// cadastro e deixar a cópia viva atenderia o pedido pela metade — e o
+    /// dado continuaria pesquisável pelo número do orçamento.
+    /// </summary>
+    [Fact]
+    public async Task Anonymize_AlsoScrubsQuotes()
+    {
+        var (controller, db, _) = Setup();
+        var customer = AddCustomer(db);
+        db.Quotes.Add(new Quote
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, Number = 1, CustomerId = customer.Id,
+            CustomerName = "Maria Souza", CustomerPhone = "11999998888",
+            TotalAmount = 250m, Status = "open",
+        });
+        db.SaveChanges();
+
+        await controller.Anonymize(customer.Id, default);
+
+        var quote = db.Quotes.Single();
+        Assert.Null(quote.CustomerName);
+        Assert.Null(quote.CustomerPhone);
+        // O orçamento em si continua existindo: é histórico comercial
+        Assert.Equal(250m, quote.TotalAmount);
+    }
+
     [Fact]
     public async Task Anonymize_ErasesPersonalDataButKeepsSalesHistory()
     {

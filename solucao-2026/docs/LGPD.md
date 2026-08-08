@@ -1,7 +1,10 @@
 # LGPD — mapeamento de dados e conformidade técnica
 
 > Documento técnico para orientar a adequação jurídica. **Não substitui parecer
-> de advogado.** Última revisão: 25/07/2026.
+> de advogado.** Última revisão: **08/08/2026**.
+>
+> Diagrama de onde os dados pessoais moram:
+> [ARQUITETURA.md §9](ARQUITETURA.md).
 
 ## 1. Papéis
 
@@ -22,6 +25,7 @@ responsabilidade tende a recair sobre o operador.
 |---|---|---|---|
 | `customers` | nome, `tax_id` (CPF), e-mail, telefone, endereço, data de nascimento, observações | Consumidor | Execução de contrato / legítimo interesse (fidelidade) |
 | `sales` | vínculo com o consumidor, itens e valores | Consumidor | Obrigação legal (fiscal) |
+| `quotes` | **nome e telefone digitados no balcão** (cópia, para imprimir no orçamento) | Consumidor | Execução de contrato (proposta comercial) |
 | `delivery_orders` | telefone e endereço de entrega | Consumidor | Execução de contrato |
 | `users` | nome, e-mail, hash de senha, último acesso | Funcionário da loja | Execução de contrato de trabalho |
 | `audit_log` | endereço IP, autor e ação | Funcionário / superadmin | Obrigação legal (art. 37) e segurança |
@@ -29,16 +33,27 @@ responsabilidade tende a recair sobre o operador.
 
 Não são tratados dados sensíveis (art. 5º, II) nem dados de crianças.
 
+> **`quotes` é a tabela que mais escapa da atenção.** Ela guarda uma *cópia*
+> do nome e telefone porque o orçamento precisa imprimi-los, e aceita cliente
+> de balcão **sem cadastro** — nesse caso o dado existe ali e em nenhum outro
+> lugar. Consequências práticas na seção 3 e na 6.
+
 ## 3. Direitos do titular — como atender hoje
 
 | Direito (art. 18) | Recurso no sistema |
 |---|---|
-| Confirmação e acesso (I, II) | **Clientes → 📄** exporta um JSON com cadastro, fidelidade e histórico de compras |
+| Confirmação e acesso (I, II) | **Clientes → 📄** exporta um JSON com cadastro, fidelidade, histórico de compras **e orçamentos** |
 | Correção (III) | Clientes → ✏️ edita qualquer campo |
 | Portabilidade (V) | O mesmo JSON da exportação, formato aberto |
-| **Eliminação (VI)** | **Clientes → 🔒** anonimiza: apaga nome, CPF, e-mail, telefone, endereço, nascimento e observações; mantém a venda sem dono identificável |
+| **Eliminação (VI)** | **Clientes → 🔒** anonimiza: apaga nome, CPF, e-mail, telefone, endereço, nascimento e observações do cadastro, **e limpa nome/telefone dos orçamentos do titular**; mantém a venda sem dono identificável |
 | Informação sobre compartilhamento (VII) | Ver seção 5 |
 | Revogação de consentimento (IX) | Anonimização |
+
+> **Corrigido em 08/08/2026:** a anonimização apagava o cadastro mas deixava
+> nome e telefone vivos em `quotes` — o pedido de eliminação era atendido pela
+> metade, e o dado continuava pesquisável pelo número do orçamento. Hoje a
+> rotina limpa as duas tabelas na mesma operação, e há teste travando a regra
+> (`Anonymize_AlsoScrubsQuotes`).
 
 **Por que anonimizar em vez de excluir:** a venda e a NFC-e têm guarda
 obrigatória (5 anos, legislação fiscal). Apagar a linha destruiria a
@@ -59,7 +74,10 @@ prova de que o pedido foi atendido.
 - **Registro de operações (art. 37):** `audit_log` grava login, criação e
   alteração de usuário, redefinição de senha, acesso de suporte
   (impersonação), exportação de dados pessoais, anonimização e exclusão de
-  cliente — com autor, IP e data.
+  cliente, sangria de caixa e devolução de venda — com autor, IP e data.
+- **Autorização de operações sensíveis:** desconto acima da alçada, sangria e
+  devolução exigem código + PIN de gerente ou admin, validados no servidor.
+  Quem autorizou fica registrado no lançamento e no `audit_log`.
 - **Backup:** dump diário criptografado em repouso, retenção de 30 dias, além
   do point-in-time recovery do Neon.
 
@@ -69,8 +87,9 @@ prova de que o pedido foi atendido.
 |---|---|---|
 | Banco de dados (Neon) | São Paulo (`sa-east-1`) | ✅ dados em repouso no Brasil |
 | Backend (Render) | **Estados Unidos** | ⚠️ processamento fora do Brasil |
-| Dashboard (Netlify) | CDN global | ⚠️ apenas arquivos estáticos, sem dado pessoal |
+| Dashboard (Render static) | CDN global | ⚠️ apenas arquivos estáticos, sem dado pessoal |
 | Backups (GitHub Actions) | Estados Unidos | ⚠️ o dump contém dados pessoais |
+| Instalador do PDV (GitHub Releases) | Estados Unidos | ✅ só binário, sem dado pessoal |
 
 O Render **não oferece região no Brasil** — as regiões disponíveis são Oregon,
 Ohio, Virginia, Frankfurt e Singapura. Portanto há transferência internacional
@@ -93,3 +112,11 @@ de dados pessoais, e ela precisa de base legal. Dois caminhos:
 - [ ] Plano de resposta a incidente (art. 48: comunicar ANPD e titulares)
 - [ ] DPA assinado com Render e GitHub (ver seção 5)
 - [ ] Aviso no PDV quando o caixa pede CPF ("para o programa de fidelidade")
+
+## 7. Lacunas técnicas conhecidas
+
+| Lacuna | Risco | Encaminhamento |
+|---|---|---|
+| **Orçamento de balcão sem cadastro** guarda nome e telefone soltos em `quotes`. Não há cliente para o titular pedir eliminação — ele não está em `customers`. | Médio: o dado fica sem rota de eliminação pela tela. | Criar expurgo por retenção (ex.: limpar nome/telefone de orçamentos fechados ou vencidos há mais de N meses). Depende da política de retenção, que ainda não existe. |
+| **Política de retenção inexistente.** Nada é apagado por idade — cadastro sem compra há anos continua ali. | Médio: art. 15/16 (fim do tratamento). | Definir prazos com o jurídico e implementar rotina. |
+| `audit_log` cresce sem expurgo. | Baixo. | Definir retenção junto com o item acima. |

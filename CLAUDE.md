@@ -24,8 +24,15 @@ Aplicação HTML5 + CSS3 + JS Vanilla + Chart.js (CDN), **sem servidor**, persis
 Estrutura: `backend/` (.NET 8/9 Web API), `dashboard/` (React + Tailwind + Tremor), `pdv/` (Electron + React + SQLite offline-first), `database/schema.sql` (PostgreSQL com Row Level Security via `app.current_tenant_id`), `docker-compose.yml`, `tools/`, `docs/`, `README.md`.
 
 - Sincronização idempotente via `OfflineSyncId` (UUID).
-- Estágio (jul/2026): **Fases 1–3 prontas e rodando ponta a ponta** — backend completo (JWT+refresh, RLS, 16+ controllers), dashboard com 13 páginas na API real, PDV Electron offline-first com baixa de estoque no servidor. Também prontos: relatórios com margem/curva ABC, módulo fiscal NFC-e com provider plugável (simulado por padrão — `Fiscal:Provider` no appsettings), SignalR de alertas de estoque (`/hubs/stock`) e `backend.Tests/` (xUnit, roda sem Postgres).
-- Migração `database/08_fiscal_documents.sql` precisa ser aplicada manualmente em banco já criado (scripts do Docker só rodam na primeira subida): `docker exec -i solucao-postgres psql -U solucao_admin -d solucao < database/08_fiscal_documents.sql`.
+- **Estágio (ago/2026): em produção com piloto.** Backend com 21 controllers, dashboard com 15 páginas, PDV offline-first. Além do núcleo: assinatura com PIX e pro-rata, LGPD (anonimização/exportação/auditoria), redes de lojas com troca de filial, operador com código+PIN e aval de supervisor, promoções aplicadas na venda, impressão térmica 58/80mm, formas de pagamento (dinheiro, PIX, débito, crédito, transferência, vale crédito) com acréscimo, PDV inteiro operável por teclado, e orçamento de balcão. `backend.Tests/` com 139 testes (xUnit, roda sem Postgres).
+- **Documentação de referência** — mantida em dia, consultar antes de perguntar:
+  - `solucao-2026/docs/ARQUITETURA.md` — diagramas dos fluxos (comece por aqui)
+  - `solucao-2026/docs/DEPLOY.md` — Neon + Render, ordem do deploy, release do PDV
+  - `solucao-2026/docs/MANUAL_TECNICO.md` — RLS, sync, impressão, armadilhas
+  - `solucao-2026/docs/LGPD.md` — mapeamento de dados e pendências jurídicas
+- **Migrações são manuais.** Não há migração no startup; os scripts do Docker só rodam na primeira subida. Em banco já criado: `docker exec -i solucao-postgres psql -U solucao_admin -d solucao < database/NN_arquivo.sql`. Em produção, pelo SQL Editor do Neon.
+- ⚠️ **Ordem obrigatória do deploy: SQL no Neon ANTES do push.** O EF mapeia a coluna nova assim que o código sobe; se ela não existir, toda consulta àquela tabela responde 500.
+- ⚠️ Numeração de migração colidida: existem `17_discount_default.sql` e `17_payment_methods.sql` (ambos aplicados). Próximo número livre: **20**.
 
 ---
 

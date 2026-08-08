@@ -154,6 +154,7 @@ public class CustomersController : ControllerBase
         object Cadastro,
         object Fidelidade,
         IReadOnlyList<object> Compras,
+        IReadOnlyList<object> Orcamentos,
         DateTime GeradoEm,
         string Observacao);
 
@@ -174,7 +175,16 @@ public class CustomersController : ControllerBase
             .Select(s => new { s.Id, s.SaleDate, s.TotalAmount, s.DiscountAmount, s.PaymentMethod, s.Status })
             .ToListAsync(ct);
 
-        _audit.Log("customer.personal_data_export", "customer", c.Id, new { sales = sales.Count });
+        // Orçamentos também guardam nome e telefone digitados no balcão:
+        // "tudo o que a loja guarda" precisa incluí-los.
+        var quotes = await _db.Quotes.AsNoTracking()
+            .Where(q => q.CustomerId == id)
+            .OrderByDescending(q => q.Number)
+            .Select(q => new { q.Number, q.CreatedAt, q.ValidUntil, q.TotalAmount, q.Status })
+            .ToListAsync(ct);
+
+        _audit.Log("customer.personal_data_export", "customer", c.Id,
+            new { sales = sales.Count, quotes = quotes.Count });
         await _db.SaveChangesAsync(ct);
 
         return Ok(new PersonalDataExport(
@@ -186,6 +196,7 @@ public class CustomersController : ControllerBase
             },
             Fidelidade: new { Pontos = c.LoyaltyPoints, TotalGasto = c.TotalSpent, Credito = c.CreditBalance },
             Compras: sales.Cast<object>().ToList(),
+            Orcamentos: quotes.Cast<object>().ToList(),
             GeradoEm: DateTime.UtcNow,
             Observacao: "Documento gerado a pedido do titular (LGPD art. 18). " +
                         "As compras são mantidas por obrigação fiscal mesmo após a anonimização do cadastro."));
@@ -220,8 +231,20 @@ public class CustomersController : ControllerBase
         c.Status = "anonymized";
         c.AnonymizedAt = DateTime.UtcNow;
 
+        // Orçamentos copiam nome e telefone para imprimir no papel do balcão.
+        // Sem limpar aqui, a anonimização apagaria o cadastro e deixaria o
+        // mesmo dado pessoal vivo noutra tabela — pedido atendido pela metade.
+        var quotes = await _db.Quotes.Where(q => q.CustomerId == id).ToListAsync(ct);
+        foreach (var q in quotes)
+        {
+            q.CustomerName = null;
+            q.CustomerPhone = null;
+            q.UpdatedAt = DateTime.UtcNow;
+        }
+
         // Registra o atendimento do pedido — sem guardar o dado que foi apagado
-        _audit.Log("customer.anonymize", "customer", c.Id, new { salesPreserved = salesCount });
+        _audit.Log("customer.anonymize", "customer", c.Id,
+            new { salesPreserved = salesCount, quotesScrubbed = quotes.Count });
         await _db.SaveChangesAsync(ct);
 
         return Ok(ToDto(c));
