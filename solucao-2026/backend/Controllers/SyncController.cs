@@ -135,6 +135,20 @@ public class SyncController : ControllerBase
                     }
                 }
 
+                // Orçamento que virou venda. Marcado aqui, junto da venda, e
+                // não num endpoint próprio: assim funciona igual quando o PDV
+                // fechou a venda offline e só sincronizou depois.
+                if (dto.QuoteId is { } quoteId)
+                {
+                    var quote = await _db.Quotes.FirstOrDefaultAsync(q => q.Id == quoteId, ct);
+                    if (quote is not null && quote.Status != "converted")
+                    {
+                        quote.Status = "converted";
+                        quote.ConvertedSaleId = sale.Id;
+                        quote.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
                 // Baixa de estoque + movimentação (pode ficar negativo: vendas
                 // offline podem ultrapassar o saldo conhecido pelo servidor)
                 foreach (var item in dto.Items)
@@ -201,7 +215,9 @@ public record SaleSyncDto(
     List<SaleItemSyncDto> Items,
     List<SalePaymentSyncDto>? Payments,
     // Opcional: PDV antigo não envia, e o padrão zero mantém o total correto
-    decimal SurchargeAmount = 0);
+    decimal SurchargeAmount = 0,
+    // Venda que nasceu de um orçamento — fecha o ciclo do papel do cliente
+    Guid? QuoteId = null);
 
 public record SaleItemSyncDto(
     Guid? ProductId,

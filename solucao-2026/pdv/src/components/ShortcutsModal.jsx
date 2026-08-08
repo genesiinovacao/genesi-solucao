@@ -10,6 +10,7 @@ const GROUPS = [
       ['12*código', 'Lançar 12 unidades de uma vez'],
       ['F3', 'Identificar cliente'],
       ['F10', 'Fechar a venda (pagamento)'],
+      ['F11', 'Orçamento (gerar ou reabrir)'],
       ['F9 F9', 'Cancelar a venda (duas vezes)'],
     ],
   },

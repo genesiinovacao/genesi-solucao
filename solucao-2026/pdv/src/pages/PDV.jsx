@@ -12,6 +12,7 @@ import PrinterSettingsModal from '../components/PrinterSettingsModal';
 import PaymentModal from '../components/PaymentModal';
 import OperatorModal from '../components/OperatorModal';
 import ShortcutsModal from '../components/ShortcutsModal';
+import QuoteModal from '../components/QuoteModal';
 import Receipt from '../components/Receipt';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
@@ -59,6 +60,10 @@ export default function PDV() {
   const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
   const [storeName, setStoreName] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showQuote, setShowQuote] = useState(false);
+  // Orçamento reaberto no carrinho: viaja junto da venda para o servidor
+  // marcar o papel do cliente como fechado.
+  const [activeQuote, setActiveQuote] = useState(null);
   // Item destacado no carrinho — é nele que ↑/↓, +/- e Delete agem.
   // Guardado por produto, não por posição: assim o destaque não pula quando
   // um item é removido ou quando o bipe repetido funde duas linhas.
@@ -288,12 +293,13 @@ export default function PDV() {
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       const anyModal = showOpenCash || showCloseCash || showPayment || showCashMovement
         || showReturnSale || showPrinterSettings || lastSale || operatorModal
-        || customerPickerOpen || showShortcuts;
+        || customerPickerOpen || showShortcuts || showQuote;
 
       // Esc sempre fecha o que está por cima: sem mouse, ficar preso num
       // modal é o pior que pode acontecer no meio de uma fila.
       if (e.key === 'Escape') {
         if (showShortcuts)          setShowShortcuts(false);
+        else if (showQuote)          setShowQuote(false);
         else if (customerPickerOpen) setCustomerPickerOpen(false);
         else if (lastSale)           setLastSale(null);
         else if (showPayment)        setShowPayment(false);
@@ -318,6 +324,7 @@ export default function PDV() {
         case 'F8':  e.preventDefault(); surchargeRef.current?.focus(); surchargeRef.current?.select(); return;
         case 'F9':  e.preventDefault(); requestCancelSale(); return;
         case 'F10': e.preventDefault(); openPayment(); return;
+        case 'F11': e.preventDefault(); setShowQuote(true); return;
         case 'F12': e.preventDefault(); if (currentSession) setShowCloseCash(true); return;
         default: break;
       }
@@ -355,7 +362,7 @@ export default function PDV() {
     // eslint-disable-next-line
   }, [cart, selectedIndex, currentSession, showOpenCash, showCloseCash, showPayment,
       showCashMovement, showReturnSale, showPrinterSettings, lastSale, operatorModal,
-      customerPickerOpen, showShortcuts]);
+      customerPickerOpen, showShortcuts, showQuote]);
 
   // Mantém o item destacado visível quando a lista passa da altura do painel
   useEffect(() => {
@@ -485,6 +492,68 @@ export default function PDV() {
   const removeItem = (id) => setCart((prev) => prev.filter((i) => i.productId !== id));
   const clearCart = () => {
     setCart([]); setDiscountPct(0); setSurcharge(''); setSelectedCustomer(null);
+    setActiveQuote(null);
+  };
+
+  /**
+   * Cliente voltou com o papel: devolve o orçamento ao carrinho. Mantém os
+   * preços que foram prometidos, mas avisa quais mudaram desde então — em
+   * autopeças o preço da peça sobe entre o orçamento e a volta do cliente.
+   */
+  const loadQuoteIntoCart = (quote) => {
+    const changed = [];
+    const missing = [];
+
+    const items = quote.items.map((qi) => {
+      const p = products.find((x) => x.id === qi.productId);
+      if (!p) missing.push(qi.productName);
+      else if (Math.abs(Number(p.sale_price) - Number(qi.unitPrice)) > 0.005) changed.push(p.name);
+
+      const gross = qi.quantity * qi.unitPrice;
+      return {
+        productId: qi.productId,
+        productName: qi.productName,
+        emoji: p?.emoji || '📦',
+        quantity: qi.quantity,
+        unitPrice: qi.unitPrice,
+        discountAmount: qi.discountAmount || 0,
+        totalPrice: qi.totalPrice,
+        promoName: null,
+        promoPercent: gross > 0 ? (qi.discountAmount || 0) / gross * 100 : 0,
+        stockAvailable: p?.stock_quantity ?? qi.quantity,
+      };
+    });
+
+    setCart(items);
+    setSurcharge(quote.surchargeAmount ? String(quote.surchargeAmount) : '');
+
+    // Desconto manual que sobrou depois das promoções já embutidas nos itens.
+    // Restaurado direto, sem pedir supervisor: o aval foi dado quando o
+    // orçamento foi montado.
+    const promo = items.reduce((s, i) => s + (i.discountAmount || 0), 0);
+    const afterPromo = quote.subtotal - promo;
+    const manual = Math.max(0, quote.discountAmount - promo);
+    setDiscountPct(afterPromo > 0 ? Number((manual / afterPromo * 100).toFixed(4)) : 0);
+
+    if (quote.customerId) {
+      const c = customers.find((x) => x.id === quote.customerId);
+      if (c) setSelectedCustomer(c);
+    }
+
+    setActiveQuote({ id: quote.id, number: quote.number });
+    setShowQuote(false);
+    searchRef.current?.focus();
+
+    const avisos = [];
+    if (changed.length) avisos.push(`preço mudou: ${changed.join(', ')}`);
+    if (missing.length) avisos.push(`fora do catálogo: ${missing.join(', ')}`);
+    showToast(
+      avisos.length
+        ? `Orçamento nº ${quote.number} carregado — ${avisos.join(' · ')}.`
+        : `Orçamento nº ${quote.number} carregado.`,
+      avisos.length ? 'error' : 'success',
+      avisos.length ? 8000 : 3000
+    );
   };
 
   /**
@@ -523,6 +592,7 @@ export default function PDV() {
       discountAmount,
       surchargeAmount,
       totalAmount: total,
+      quoteId: activeQuote?.id ?? null,
       paymentMethod: paymentInfo.paymentMethod,
       amountReceived: paymentInfo.amountReceived,
       changeAmount: paymentInfo.changeAmount,
@@ -713,7 +783,15 @@ export default function PDV() {
                overflow: 'hidden'
              }}>
         <div className="p-5 border-b border-slate-800 flex items-center justify-between">
-          <h2 className="font-bold text-lg">🛒 Carrinho ({cart.length})</h2>
+          <h2 className="font-bold text-lg">
+            🛒 Carrinho ({cart.length})
+            {activeQuote && (
+              <span className="ml-2 text-[11px] font-normal px-2 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800"
+                    title="Fechar esta venda dá baixa no orçamento">
+                📄 orçamento nº {activeQuote.number}
+              </span>
+            )}
+          </h2>
           <button onClick={() => setCustomerPickerOpen(true)} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg">
             {selectedCustomer ? `👤 ${selectedCustomer.name.split(' ')[0]}` : '👤 Cliente'}
             <kbd className="ml-1.5 opacity-60">F3</kbd>
@@ -819,6 +897,11 @@ export default function PDV() {
                   className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold py-4 rounded-xl text-lg shadow-lg shadow-emerald-900/30">
             💳 Pagamento · F10
           </button>
+          <button onClick={() => setShowQuote(true)}
+                  title="Gerar orçamento para o cliente levar, ou reabrir um orçamento salvo"
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 rounded-lg text-sm">
+            📄 Orçamento · F11
+          </button>
           {cart.length > 0 && (
             <button onClick={requestCancelSale} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
               Cancelar venda · F9
@@ -879,6 +962,27 @@ export default function PDV() {
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+      {showQuote && (
+        <QuoteModal
+          cart={cart}
+          subtotal={subtotal}
+          discountAmount={discountAmount}
+          surchargeAmount={surchargeAmount}
+          total={total}
+          selectedCustomer={selectedCustomer}
+          tenantName={storeName || user?.tenantName}
+          onClose={() => { setShowQuote(false); searchRef.current?.focus(); }}
+          onLoadQuote={loadQuoteIntoCart}
+          onSaved={(_quote, message) => {
+            // Orçamento entregue: o balcão libera para o próximo cliente
+            setShowQuote(false);
+            clearCart();
+            showToast(message, 'success', 6000);
+            searchRef.current?.focus();
+          }}
+        />
+      )}
 
       {operatorModal && (
         <OperatorModal

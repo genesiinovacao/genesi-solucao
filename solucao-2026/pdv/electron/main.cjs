@@ -1,5 +1,5 @@
 // SOLUÇÃO 2026 — PDV Electron main process
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -15,6 +15,12 @@ const DEV_URL = 'http://localhost:5174';
 let mainWindow = null;
 
 function createWindow() {
+  // PDV instalado não tem menu: o operador não deve abrir DevTools nem
+  // recarregar a janela, e os aceleradores do menu (F11 tela cheia, F12,
+  // Ctrl+R) roubariam teclas que o caixa usa para vender. Em dev o menu
+  // fica, senão depurar vira um castigo.
+  if (!isDev) Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,

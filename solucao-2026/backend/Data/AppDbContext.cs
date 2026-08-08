@@ -18,6 +18,8 @@ public class AppDbContext : DbContext
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
     public DbSet<SaleReturn> SaleReturns => Set<SaleReturn>();
     public DbSet<SaleReturnItem> SaleReturnItems => Set<SaleReturnItem>();
+    public DbSet<Quote> Quotes => Set<Quote>();
+    public DbSet<QuoteItem> QuoteItems => Set<QuoteItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<FinancialTransaction> FinancialTransactions => Set<FinancialTransaction>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
@@ -179,6 +181,31 @@ public class AppDbContext : DbContext
             e.Property(x => x.QuantityReturned).HasColumnType("decimal(12,3)");
             e.Property(x => x.UnitPrice).HasColumnType("decimal(12,2)");
             e.Property(x => x.RefundAmount).HasColumnType("decimal(15,2)");
+        });
+
+        b.Entity<Quote>(e =>
+        {
+            e.ToTable("quotes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
+            e.Property(x => x.Subtotal).HasColumnType("decimal(15,2)");
+            e.Property(x => x.DiscountAmount).HasColumnType("decimal(15,2)");
+            e.Property(x => x.SurchargeAmount).HasColumnType("decimal(15,2)");
+            e.Property(x => x.TotalAmount).HasColumnType("decimal(15,2)");
+            e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.QuoteId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<QuoteItem>(e =>
+        {
+            e.ToTable("quote_items");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.Quantity).HasColumnType("decimal(12,3)");
+            e.Property(x => x.UnitPrice).HasColumnType("decimal(12,2)");
+            e.Property(x => x.DiscountAmount).HasColumnType("decimal(12,2)");
+            e.Property(x => x.TotalPrice).HasColumnType("decimal(12,2)");
         });
 
         b.Entity<StockMovement>(e =>

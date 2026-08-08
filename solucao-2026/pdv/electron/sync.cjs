@@ -61,6 +61,7 @@ async function runSync(apiBase, jwt) {
       subtotal:      sale.subtotal,
       discountAmount: sale.discountAmount,
       surchargeAmount: sale.surchargeAmount || 0,
+      quoteId:        sale.quoteId || null,
       totalAmount:   sale.totalAmount,
       paymentMethod: sale.paymentMethod,
       amountReceived: sale.amountReceived,

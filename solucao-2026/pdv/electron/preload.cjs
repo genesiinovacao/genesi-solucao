@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('pdv', {
   // ---- Impressão térmica silenciosa ----
   listPrinters: ()             => ipcRenderer.invoke('print:list-printers'),
   printReceiptSilent: (payload) => ipcRenderer.invoke('print:receipt-silent', payload),
+  printQuoteSilent:   (payload) => ipcRenderer.invoke('print:quote-silent', payload),
   printReceiptDialog: (payload) => ipcRenderer.invoke('print:receipt-dialog', payload),
   saveReceiptPdf:     (payload) => ipcRenderer.invoke('print:receipt-pdf', payload),
 

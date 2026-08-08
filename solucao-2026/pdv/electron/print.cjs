@@ -138,8 +138,92 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 </body></html>`;
 }
 
+/**
+ * Orçamento. Mesma folha e mesmo CSS do cupom — o que muda é o miolo:
+ * sem pagamento, sem troco, e com número e validade em destaque, que é o
+ * que o cliente confere quando volta com o papel dias depois.
+ */
+function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
+  const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
+  const narrow = Number(paperWidth) === 58;
+  const baseFont = narrow ? 10 : 12;
+  const printableWidth = narrow ? '46mm' : '70mm';
+
+  const itemsHtml = (quote.items || []).map((i) => `
+    <div class="item">
+      <div class="name">${escapeHtml(i.productName)}</div>
+      <div class="row">
+        <span>${i.quantity} x ${Number(i.unitPrice).toFixed(2)}</span>
+        <span class="b">${Number(i.totalPrice).toFixed(2)}</span>
+      </div>
+    </div>
+  `).join('');
+
+  const validUntil = String(quote.validUntil || '').split('-').reverse().join('/');
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<style>
+  @page { size: ${narrow ? '58mm' : '80mm'} auto; margin: 0; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: ${baseFont}px;
+    color: #000; background: #fff;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    text-rendering: geometricPrecision;
+  }
+  * { color: #000 !important; }
+  .receipt { width: ${printableWidth}; max-width: ${printableWidth};
+             padding: ${narrow ? '2mm 1mm' : '4mm 2mm'};
+             overflow: hidden; box-sizing: border-box; }
+  .receipt * { max-width: 100%; overflow-wrap: anywhere; }
+  .center { text-align: center; }
+  .b { font-weight: 700; }
+  .big { font-size: ${baseFont + 2}px; font-weight: 700; }
+  .small { font-size: ${baseFont - 1}px; }
+  .hr { border-top: 1px solid #000; margin: ${narrow ? '4px' : '6px'} 0; }
+  .row { display: flex; justify-content: space-between; gap: 4px; }
+  .total { font-size: ${baseFont + 2}px; font-weight: 700; }
+  .item { margin-bottom: 3px; }
+  .item .name { word-break: break-word; }
+  .box { border: 1px solid #000; padding: 3px; margin: 4px 0; text-align: center; }
+</style>
+</head><body>
+  <div class="receipt">
+    <div class="center b big">${safeName}</div>
+    <div class="center b small">ORÇAMENTO</div>
+    <div class="center small">${dt(quote.createdAtIso)}</div>
+    <div class="box b">Nº ${escapeHtml(String(quote.number ?? '—'))}</div>
+    ${quote.customerName ? `<div class="small">Cliente: ${escapeHtml(quote.customerName)}</div>` : ''}
+    ${quote.customerPhone ? `<div class="small">Fone: ${escapeHtml(quote.customerPhone)}</div>` : ''}
+    ${quote.sellerName ? `<div class="small">Vendedor: ${escapeHtml(quote.sellerName)}</div>` : ''}
+    <div class="hr"></div>
+
+    ${itemsHtml}
+
+    <div class="hr"></div>
+    <div class="row"><span>Subtotal</span><span>${brl(quote.subtotal)}</span></div>
+    ${quote.discountAmount > 0 ? `<div class="row"><span>Desconto</span><span>- ${brl(quote.discountAmount)}</span></div>` : ''}
+    ${quote.surchargeAmount > 0 ? `<div class="row"><span>Acréscimo</span><span>+ ${brl(quote.surchargeAmount)}</span></div>` : ''}
+    <div class="row total"><span>TOTAL</span><span>${brl(quote.totalAmount)}</span></div>
+
+    <div class="box b">Válido até ${escapeHtml(validUntil)}</div>
+    ${quote.notes ? `<div class="small">Obs: ${escapeHtml(quote.notes)}</div>` : ''}
+
+    <div class="hr"></div>
+    <div class="center small">Este documento não é cupom fiscal</div>
+    <div class="center small">e não garante reserva de estoque.</div>
+    <div class="center" style="font-size:10px; color:#888;">SOLUÇÃO 2026 · PDV</div>
+  </div>
+</body></html>`;
+}
+
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
-function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true, printMode = 1 }) {
+// Com `quote` no payload imprime orçamento; com `sale`, o cupom da venda.
+function printSilent({ sale, quote, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true, printMode = 1 }) {
   // O nome da impressora manda: evita cupom largo demais quando a opção da
   // tela não corresponde ao equipamento instalado.
   paperWidth = resolvePaperWidth(deviceName, paperWidth);
@@ -149,7 +233,9 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
       width: 400, height: 800,
       webPreferences: { offscreen: false, sandbox: true },
     });
-    const html = buildReceiptHtml({ sale, tenantName, paperWidth });
+    const html = quote
+      ? buildQuoteHtml({ quote, tenantName, paperWidth })
+      : buildReceiptHtml({ sale, tenantName, paperWidth });
 
     // Espera a renderização assentar: em janela oculta o layout pode não
     // estar pronto no did-finish-load, e o driver receberia página vazia.
@@ -193,12 +279,13 @@ function printSilent({ sale, tenantName, deviceName, copies = 1, paperWidth = 80
     // Diagnóstico: guarda o último cupom gerado (HTML + parâmetros) para
     // comparar o que sai no teste com o que sai na venda real.
     try {
-      const tag = String(sale.offlineSyncId || '').startsWith('TEST') ? 'teste' : 'venda';
+      const tag = quote ? 'orcamento'
+        : String(sale.offlineSyncId || '').startsWith('TEST') ? 'teste' : 'venda';
       const dbg = path.join(os.tmpdir(), `solucao-ultimo-cupom-${tag}.html`);
       fs.writeFileSync(dbg, html, 'utf8');
       fs.writeFileSync(
         path.join(os.tmpdir(), `solucao-ultimo-cupom-${tag}.json`),
-        JSON.stringify({ paperWidthUsado: paperWidth, printMode, copies, deviceName, silent, sale }, null, 2),
+        JSON.stringify({ paperWidthUsado: paperWidth, printMode, copies, deviceName, silent, sale, quote }, null, 2),
         'utf8'
       );
     } catch { /* diagnóstico nunca impede a impressão */ }
@@ -283,6 +370,16 @@ function registerPrintIpc() {
     }
   });
 
+  // Orçamento: mesma rota de impressão, miolo diferente
+  ipcMain.handle('print:quote-silent', async (_e, payload) => {
+    try {
+      await printSilent(payload);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   // Diagnóstico: imprime abrindo a caixa de diálogo do Windows
   ipcMain.handle('print:receipt-dialog', async (_e, payload) => {
     try {
@@ -304,5 +401,5 @@ function registerPrintIpc() {
   });
 }
 
-// buildReceiptHtml exportado para permitir validar o cupom fora do Electron
-module.exports = { registerPrintIpc, buildReceiptHtml, resolvePaperWidth };
+// Builders exportados para permitir validar o layout fora do Electron
+module.exports = { registerPrintIpc, buildReceiptHtml, buildQuoteHtml, resolvePaperWidth };
