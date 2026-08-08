@@ -153,6 +153,7 @@ export default function Sales() {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Data/Hora</th>
+                <th className="px-4 py-3">Vendedor</th>
                 <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3 text-right">Itens</th>
                 <th className="px-4 py-3 text-right">Total</th>
@@ -163,10 +164,10 @@ export default function Sales() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">Carregando…</td></tr>
               )}
               {!loading && data.items.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                <tr><td colSpan={8} className="px-4 py-16 text-center text-slate-500">
                   Nenhuma venda registrada ainda.<br/>
                   <span className="text-xs">As vendas serão criadas pelo PDV na Fase 3.</span>
                 </td></tr>
@@ -174,6 +175,9 @@ export default function Sales() {
               {!loading && data.items.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => openDetail(s.id)}>
                   <td className="px-4 py-3 text-slate-700">{dt(s.saleDate)}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {s.sellerName || <span className="text-slate-400 italic">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{s.customerName || <span className="text-slate-400 italic">Sem cliente</span>}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{s.itemCount}</td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-800">{brl(s.totalAmount)}</td>
@@ -221,6 +225,14 @@ export default function Sales() {
                     <div>
                       <p className="text-xs text-slate-500 uppercase">Pagamento</p>
                       <p className="font-medium text-slate-800">{paymentLabel[selected.paymentMethod] || selected.paymentMethod}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Vendedor</p>
+                      <p className="font-medium text-slate-800">{selected.sellerName || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Terminal</p>
+                      <p className="font-medium text-slate-800">{selected.posTerminalId || '—'}</p>
                     </div>
                   </div>
 

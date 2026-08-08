@@ -45,6 +45,7 @@ public class SalesController : ControllerBase
                 s.Id,
                 s.SaleDate,
                 s.CustomerId,
+                s.UserId,
                 s.TotalAmount,
                 s.PaymentMethod,
                 s.Status,
@@ -60,13 +61,22 @@ public class SalesController : ControllerBase
                 .Where(c => customerIds.Contains(c.Id))
                 .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
 
+        // Idem para o operador que fechou a venda (quem responde pelo caixa)
+        var sellerIds = pageData.Where(p => p.UserId != null).Select(p => p.UserId!.Value).Distinct().ToList();
+        var sellerNames = sellerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Users.AsNoTracking()
+                .Where(u => sellerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.Name, ct);
+
         var items = pageData.Select(p => new SaleListItemDto(
             p.Id, p.SaleDate,
             p.CustomerId is null ? null : customerNames.GetValueOrDefault(p.CustomerId.Value),
             p.ItemCount,
             p.TotalAmount,
             p.PaymentMethod,
-            p.Status)).ToList();
+            p.Status,
+            p.UserId is null ? null : sellerNames.GetValueOrDefault(p.UserId.Value))).ToList();
 
         return Ok(new SaleListResponse(
             items, page, pageSize, total,
@@ -92,6 +102,15 @@ public class SalesController : ControllerBase
                 .FirstOrDefaultAsync(ct);
         }
 
+        string? sellerName = null;
+        if (s.UserId is { } uid)
+        {
+            sellerName = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == uid)
+                .Select(u => u.Name)
+                .FirstOrDefaultAsync(ct);
+        }
+
         return Ok(new SaleDetailDto(
             s.Id, s.SaleDate, s.CustomerId, customerName,
             s.Subtotal, s.DiscountAmount, s.TotalAmount,
@@ -100,6 +119,6 @@ public class SalesController : ControllerBase
                 i.Id, i.ProductId, i.ProductName, i.Quantity,
                 i.UnitPrice, i.DiscountAmount, i.TotalPrice)).ToList(),
             s.Payments.Select(p => new SalePaymentDto(p.Id, p.Method, p.Amount)).ToList(),
-            s.SurchargeAmount));
+            s.SurchargeAmount, sellerName, s.PosTerminalId));
     }
 }

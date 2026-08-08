@@ -11,6 +11,7 @@ import ReturnSaleModal from '../components/ReturnSaleModal';
 import PrinterSettingsModal from '../components/PrinterSettingsModal';
 import PaymentModal from '../components/PaymentModal';
 import OperatorModal from '../components/OperatorModal';
+import ShortcutsModal from '../components/ShortcutsModal';
 import Receipt from '../components/Receipt';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
@@ -57,8 +58,19 @@ export default function PDV() {
   const [logo, setLogo] = useState(null);             // logo do cliente
   const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
   const [storeName, setStoreName] = useState(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  // Item destacado no carrinho — é nele que ↑/↓, +/- e Delete agem.
+  // Guardado por produto, não por posição: assim o destaque não pula quando
+  // um item é removido ou quando o bipe repetido funde duas linhas.
+  const [selectedId, setSelectedId] = useState(null);
 
   const searchRef = useRef(null);
+  const discountRef = useRef(null);
+  const surchargeRef = useRef(null);
+  const cartRef = useRef(null);
+
+  // Posição do destaque. Item removido → cai no primeiro, nunca em índice morto.
+  const selectedIndex = Math.max(0, cart.findIndex((i) => i.productId === selectedId));
 
   // ---- Load catalogue from local SQLite ----
   const loadLocal = async () => {
@@ -266,11 +278,70 @@ export default function PDV() {
   }, [isOnline]);
 
   // ---- Keyboard shortcuts ----
+  // Caixa de supermercado opera sem mouse: tudo que dá para clicar precisa
+  // ter tecla. As de função agem na tela de venda; ↑/↓/+/-/Delete agem no
+  // item destacado do carrinho, mas só com a busca vazia — senão atrapalham
+  // quem está digitando o nome do produto.
   useEffect(() => {
     const onKey = (e) => {
       const tag = e.target.tagName;
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-      if (showOpenCash || showCloseCash || showPayment || showCashMovement || showReturnSale || showPrinterSettings || lastSale) return;
+      const anyModal = showOpenCash || showCloseCash || showPayment || showCashMovement
+        || showReturnSale || showPrinterSettings || lastSale || operatorModal
+        || customerPickerOpen || showShortcuts;
+
+      // Esc sempre fecha o que está por cima: sem mouse, ficar preso num
+      // modal é o pior que pode acontecer no meio de uma fila.
+      if (e.key === 'Escape') {
+        if (showShortcuts)          setShowShortcuts(false);
+        else if (customerPickerOpen) setCustomerPickerOpen(false);
+        else if (lastSale)           setLastSale(null);
+        else if (showPayment)        setShowPayment(false);
+        else if (showCashMovement)   setShowCashMovement(false);
+        else if (showReturnSale)     setShowReturnSale(false);
+        else if (showPrinterSettings) setShowPrinterSettings(false);
+        else if (operatorModal)      setOperatorModal(null);
+        return;
+      }
+
+      // Com modal aberto, quem manda são os atalhos dele
+      if (anyModal) return;
+
+      switch (e.key) {
+        case 'F1':  e.preventDefault(); setShowShortcuts(true); return;
+        case 'F2':  e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); return;
+        case 'F3':  e.preventDefault(); setCustomerPickerOpen(true); return;
+        case 'F4':  e.preventDefault(); discountRef.current?.focus(); discountRef.current?.select(); return;
+        case 'F5':  e.preventDefault(); refreshCatalog(true); return;
+        case 'F6':  e.preventDefault(); if (currentSession) setShowCashMovement(true); return;
+        case 'F7':  e.preventDefault(); if (currentSession) setShowReturnSale(true); return;
+        case 'F8':  e.preventDefault(); surchargeRef.current?.focus(); surchargeRef.current?.select(); return;
+        case 'F9':  e.preventDefault(); requestCancelSale(); return;
+        case 'F10': e.preventDefault(); openPayment(); return;
+        case 'F12': e.preventDefault(); if (currentSession) setShowCloseCash(true); return;
+        default: break;
+      }
+
+      // Navegação do carrinho funciona mesmo com o foco na busca: o campo é
+      // de uma linha só, as setas não fazem falta nele.
+      if (cart.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        const delta = e.key === 'ArrowDown' ? 1 : -1;
+        const next = Math.min(cart.length - 1, Math.max(0, selectedIndex + delta));
+        setSelectedId(cart[next].productId);
+        return;
+      }
+
+      // Busca vazia = o operador não está digitando, então as teclas de
+      // edição podem agir no item destacado sem roubar o que ele escreve.
+      const searchEmpty = !(searchRef.current?.value || '').trim();
+      const item = cart[selectedIndex];
+      if (searchEmpty && item) {
+        if (e.key === '+') { e.preventDefault(); updateQty(item.productId, +1); return; }
+        if (e.key === '-') { e.preventDefault(); updateQty(item.productId, -1); return; }
+        if (e.key === 'Delete') { e.preventDefault(); removeItem(item.productId); return; }
+      }
+
       // Leitor bipando com o foco fora do campo: captura o caractere em vez
       // de só focar, senão o primeiro dígito do código se perde.
       if (!inField && /^[\w\d]$/.test(e.key)) {
@@ -278,14 +349,19 @@ export default function PDV() {
         searchRef.current?.focus();
         setSearch((s) => s + e.key);
       }
-      if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === 'F10' && cart.length > 0) { e.preventDefault(); openPayment(); }
-      if (e.key === 'Escape') setCustomerPickerOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line
-  }, [cart, showOpenCash, showCloseCash, showPayment, showCashMovement, showReturnSale, showPrinterSettings, lastSale]);
+  }, [cart, selectedIndex, currentSession, showOpenCash, showCloseCash, showPayment,
+      showCashMovement, showReturnSale, showPrinterSettings, lastSale, operatorModal,
+      customerPickerOpen, showShortcuts]);
+
+  // Mantém o item destacado visível quando a lista passa da altura do painel
+  useEffect(() => {
+    cartRef.current?.querySelector('[data-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId, cart.length]);
 
   const categories = useMemo(() => {
     const set = new Set(products.map((p) => p.category).filter(Boolean));
@@ -308,19 +384,28 @@ export default function PDV() {
    * Código de barras e SKU são exatos e ignoram o filtro de categoria.
    */
   const handleScan = (rawTerm) => {
-    const term = (rawTerm || '').trim();
+    let term = (rawTerm || '').trim();
     if (!term) return;
+
+    // Multiplicador "12*7891234567895": quantidade antes do código, do jeito
+    // que o caixa já faz em qualquer PDV. Evita bipar 12 vezes a mesma água.
+    let times = 1;
+    const mult = term.match(/^(\d+)\s*[*xX]\s*(.+)$/);
+    if (mult) {
+      times = Math.min(999, Number(mult[1]) || 1);
+      term = mult[2].trim();
+    }
 
     const exact = products.find((p) => p.is_active && (p.barcode === term || p.sku === term));
     if (exact) {
-      addToCart(exact);
+      addToCart(exact, times);
       return;
     }
 
     const lower = term.toLowerCase();
     const byName = products.filter((p) => p.is_active && p.name.toLowerCase().includes(lower));
     if (byName.length === 1) {
-      addToCart(byName[0]);
+      addToCart(byName[0], times);
       return;
     }
     if (byName.length === 0) {
@@ -358,27 +443,31 @@ export default function PDV() {
     return { ...item, quantity, discountAmount: discount, totalPrice: gross - discount };
   };
 
-  const addToCart = (p) => {
+  const addToCart = (p, qty = 1) => {
     if (p.stock_quantity <= 0) return showToast(`${p.name} está sem estoque.`, 'error');
     setCart((prev) => {
       const found = prev.find((i) => i.productId === p.id);
       if (found) {
-        if (found.quantity + 1 > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
-        return prev.map((i) => i.productId === p.id ? withQuantity(i, i.quantity + 1) : i);
+        if (found.quantity + qty > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
+        return prev.map((i) => i.productId === p.id ? withQuantity(i, i.quantity + qty) : i);
       }
+      if (qty > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
       const promo = promoFor(p, selectedCustomer);
       const pct = promo?.discountPercent || 0;
+      const gross = p.sale_price * qty;
       return [...prev, {
         productId: p.id, productName: p.name, emoji: p.emoji,
-        quantity: 1, unitPrice: p.sale_price,
-        totalPrice: p.sale_price * (1 - pct / 100),
-        discountAmount: p.sale_price * (pct / 100),
+        quantity: qty, unitPrice: p.sale_price,
+        totalPrice: gross * (1 - pct / 100),
+        discountAmount: gross * (pct / 100),
         promoName: promo?.name || null,
         promoPercent: pct,
         stockAvailable: p.stock_quantity,
       }];
     });
     setSearch('');
+    // Destaca o que acabou de entrar: +/- e Delete agem nele sem navegar
+    setSelectedId(p.id);
     // Deixa o campo pronto para o próximo bipe, mesmo se o item veio do clique
     searchRef.current?.focus();
   };
@@ -396,6 +485,23 @@ export default function PDV() {
   const removeItem = (id) => setCart((prev) => prev.filter((i) => i.productId !== id));
   const clearCart = () => {
     setCart([]); setDiscountPct(0); setSurcharge(''); setSelectedCustomer(null);
+  };
+
+  /**
+   * Cancelar a venda exige dois toques. F9 fica colado no F10 (pagamento):
+   * um dedo escorregando apagaria o carrinho inteiro no meio da fila.
+   */
+  const cancelArmRef = useRef(0);
+  const requestCancelSale = () => {
+    if (cart.length === 0) return;
+    if (Date.now() - cancelArmRef.current < 4000) {
+      cancelArmRef.current = 0;
+      clearCart();
+      showToast('Venda cancelada.', 'success');
+      return;
+    }
+    cancelArmRef.current = Date.now();
+    showToast('Pressione F9 de novo para cancelar a venda.', 'error', 4000);
   };
 
   // ---- Payment flow ----
@@ -502,14 +608,14 @@ export default function PDV() {
               <>
                 <button onClick={() => setShowCashMovement(true)}
                         className="px-3 py-1.5 bg-amber-900/40 text-amber-300 rounded-full text-xs hover:bg-amber-900/60">
-                  💵 Sangria/Suprimento
+                  💵 Sangria/Suprimento <kbd className="opacity-60">F6</kbd>
                 </button>
                 <button onClick={() => setShowReturnSale(true)}
                         className="px-3 py-1.5 bg-rose-900/40 text-rose-300 rounded-full text-xs hover:bg-rose-900/60">
-                  ↩️ Devolução
+                  ↩️ Devolução <kbd className="opacity-60">F7</kbd>
                 </button>
                 <button onClick={() => setShowCloseCash(true)} className="px-3 py-1.5 bg-emerald-900/40 text-emerald-300 rounded-full text-xs hover:bg-emerald-900/60">
-                  💰 Caixa aberto · Fechar
+                  💰 Caixa aberto · Fechar <kbd className="opacity-60">F12</kbd>
                 </button>
               </>
             )}
@@ -530,10 +636,12 @@ export default function PDV() {
               </button>
             )}
             <button onClick={() => refreshCatalog(true)} disabled={refreshing}
-                    title="Atualizar catálogo agora (produtos e estoque do dashboard)"
+                    title="Atualizar catálogo agora — F5 (produtos e estoque do dashboard)"
                     className={`text-slate-400 hover:text-white text-sm px-2 ${refreshing ? 'animate-spin' : ''}`}>🔄</button>
             <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
                     className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
+            <button onClick={() => setShowShortcuts(true)} title="Atalhos do teclado — F1"
+                    className="text-slate-400 hover:text-white text-sm px-2">⌨️</button>
             {globalLogo && (
               <img src={globalLogo} alt="SOLUÇÃO" title="SOLUÇÃO 2026"
                    className="h-8 object-contain rounded bg-white/95 p-0.5" />
@@ -547,7 +655,7 @@ export default function PDV() {
         </header>
 
         <div className="p-4 flex gap-3 border-b border-slate-800 bg-slate-900/30">
-          <input ref={searchRef} type="text" placeholder="🔍 Buscar / escanear código de barras (F2)…"
+          <input ref={searchRef} type="text" placeholder="🔍 Escaneie ou digite (F2) · 12*código para quantidade"
                  value={search} onChange={(e) => setSearch(e.target.value)}
                  onKeyDown={(e) => {
                    if (e.key === 'Enter') {
@@ -608,20 +716,29 @@ export default function PDV() {
           <h2 className="font-bold text-lg">🛒 Carrinho ({cart.length})</h2>
           <button onClick={() => setCustomerPickerOpen(true)} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg">
             {selectedCustomer ? `👤 ${selectedCustomer.name.split(' ')[0]}` : '👤 Cliente'}
+            <kbd className="ml-1.5 opacity-60">F3</kbd>
           </button>
         </div>
 
-        <div className="min-h-0 overflow-y-auto p-4 custom-scrollbar">
+        <div ref={cartRef} className="min-h-0 overflow-y-auto p-4 custom-scrollbar">
           {cart.length === 0 ? (
             <div className="text-center text-slate-500 py-20">
               <div className="text-5xl mb-3 opacity-40">🛒</div>
               <p className="text-sm">Carrinho vazio.</p>
-              <p className="text-xs mt-1 text-slate-600">Clique em um produto ou escaneie.</p>
+              <p className="text-xs mt-1 text-slate-600">Escaneie o produto ou digite o nome.</p>
+              <p className="text-[11px] mt-3 text-slate-600">F1 mostra todos os atalhos</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {cart.map((i) => (
-                <div key={i.productId} className="bg-slate-950/50 p-3 rounded-lg flex items-center gap-3">
+              {cart.map((i, idx) => (
+                <div key={i.productId}
+                     data-selected={idx === selectedIndex}
+                     onClick={() => setSelectedId(i.productId)}
+                     className={`p-3 rounded-lg flex items-center gap-3 border ${
+                       idx === selectedIndex
+                         ? 'bg-blue-950/40 border-blue-600'
+                         : 'bg-slate-950/50 border-transparent'
+                     }`}>
                   <span className="text-2xl">{i.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{i.productName}</div>
@@ -663,11 +780,12 @@ export default function PDV() {
           )}
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400">
-              Desconto (%)
+              Desconto (%) <kbd className="opacity-50 text-xs">F4</kbd>
               {maxDiscount === 0 && <span className="text-amber-500 text-xs ml-1" title="Todo desconto exige gerente">🔒</span>}
             </label>
-            <input type="number" min="0" max="100" step="0.5" value={discountPct}
+            <input ref={discountRef} type="number" min="0" max="100" step="0.5" value={discountPct}
                    onChange={(e) => onDiscountChange(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === 'Enter') searchRef.current?.focus(); }}
                    className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-mono" />
           </div>
           {discountAmount > 0 && (
@@ -678,10 +796,11 @@ export default function PDV() {
           )}
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400" title="Entrega, taxa de serviço ou juros repassados">
-              Acréscimo (R$)
+              Acréscimo (R$) <kbd className="opacity-50 text-xs">F8</kbd>
             </label>
-            <input type="number" min="0" step="0.5" value={surcharge}
+            <input ref={surchargeRef} type="number" min="0" step="0.5" value={surcharge}
                    onChange={(e) => setSurcharge(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === 'Enter') searchRef.current?.focus(); }}
                    placeholder="0,00"
                    className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-orange-300 font-mono" />
           </div>
@@ -701,8 +820,8 @@ export default function PDV() {
             💳 Pagamento · F10
           </button>
           {cart.length > 0 && (
-            <button onClick={clearCart} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
-              Cancelar venda
+            <button onClick={requestCancelSale} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
+              Cancelar venda · F9
             </button>
           )}
         </div>
@@ -759,6 +878,8 @@ export default function PDV() {
         <PrinterSettingsModal onClose={() => setShowPrinterSettings(false)} />
       )}
 
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
       {operatorModal && (
         <OperatorModal
           mode={operatorModal.mode}
@@ -770,30 +891,12 @@ export default function PDV() {
       )}
 
       {customerPickerOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-6 z-50" onClick={() => setCustomerPickerOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
-            <header className="p-5 border-b border-slate-800 flex justify-between items-center">
-              <h3 className="font-bold">👤 Selecionar cliente</h3>
-              <button onClick={() => { setSelectedCustomer(null); setCustomerPickerOpen(false); }}
-                      className="text-xs text-slate-400 hover:text-slate-200">Limpar seleção</button>
-            </header>
-            <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-              {customers.length === 0 && <p className="text-center text-slate-500 py-10 text-sm">Sem clientes locais.</p>}
-              {customers.map((c) => (
-                <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerPickerOpen(false); }}
-                        className="block w-full text-left px-4 py-3 hover:bg-slate-800 rounded">
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-xs text-slate-400">
-                    {c.tax_id || c.phone || '—'} · {c.loyalty_points} pts
-                    {Number(c.credit_balance) > 0 && (
-                      <span className="text-amber-400"> · 🎟️ {brl(c.credit_balance)} em vale</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <CustomerPicker
+          customers={customers}
+          onPick={(c) => { setSelectedCustomer(c); setCustomerPickerOpen(false); searchRef.current?.focus(); }}
+          onClear={() => { setSelectedCustomer(null); setCustomerPickerOpen(false); searchRef.current?.focus(); }}
+          onClose={() => { setCustomerPickerOpen(false); searchRef.current?.focus(); }}
+        />
       )}
 
       {toast && (
@@ -814,5 +917,83 @@ export default function PDV() {
                onPrint={() => window.print()} />
     )}
     </>
+  );
+}
+
+/**
+ * Seleção de cliente por teclado: digita para filtrar (nome, CPF ou telefone),
+ * ↑/↓ escolhe, Enter confirma. O operador nunca precisa soltar o teclado no
+ * meio da fila para pegar o mouse.
+ */
+function CustomerPicker({ customers, onPick, onClear, onClose }) {
+  const [term, setTerm] = useState('');
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    const s = term.trim().toLowerCase();
+    if (!s) return customers;
+    const digits = s.replace(/\D/g, '');
+    return customers.filter((c) =>
+      c.name.toLowerCase().includes(s) ||
+      (digits && (c.tax_id || '').replace(/\D/g, '').includes(digits)) ||
+      (digits && (c.phone || '').replace(/\D/g, '').includes(digits))
+    );
+  }, [term, customers]);
+
+  // Filtro novo encurtou a lista: o destaque não pode ficar fora dela
+  const safeIdx = Math.min(idx, Math.max(0, filtered.length - 1));
+
+  useEffect(() => {
+    listRef.current?.querySelector('[data-on="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [safeIdx, filtered.length]);
+
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(Math.min(filtered.length - 1, safeIdx + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setIdx(Math.max(0, safeIdx - 1)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (filtered[safeIdx]) onPick(filtered[safeIdx]); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-6 z-50" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+           className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+        <header className="p-5 border-b border-slate-800 flex justify-between items-center">
+          <h3 className="font-bold">👤 Selecionar cliente</h3>
+          <button onClick={onClear} className="text-xs text-slate-400 hover:text-slate-200">Limpar seleção</button>
+        </header>
+
+        <div className="p-4 border-b border-slate-800">
+          <input autoFocus type="text" value={term} onKeyDown={onKey}
+                 onChange={(e) => { setTerm(e.target.value); setIdx(0); }}
+                 placeholder="🔍 Nome, CPF ou telefone…"
+                 className="w-full bg-slate-950 border border-slate-700 px-4 py-3 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none" />
+          <p className="text-[11px] text-slate-500 mt-2">↑ ↓ escolhe · Enter confirma · Esc fecha</p>
+        </div>
+
+        <div ref={listRef} className="flex-1 overflow-auto p-2 custom-scrollbar">
+          {filtered.length === 0 && (
+            <p className="text-center text-slate-500 py-10 text-sm">
+              {customers.length === 0 ? 'Sem clientes locais.' : 'Nenhum cliente encontrado.'}
+            </p>
+          )}
+          {filtered.map((c, i) => (
+            <button key={c.id} data-on={i === safeIdx} onClick={() => onPick(c)}
+                    onMouseEnter={() => setIdx(i)}
+                    className={`block w-full text-left px-4 py-3 rounded border ${
+                      i === safeIdx ? 'bg-blue-950/40 border-blue-600' : 'border-transparent hover:bg-slate-800'
+                    }`}>
+              <div className="font-medium">{c.name}</div>
+              <div className="text-xs text-slate-400">
+                {c.tax_id || c.phone || '—'} · {c.loyalty_points} pts
+                {Number(c.credit_balance) > 0 && (
+                  <span className="text-amber-400"> · 🎟️ {brl(c.credit_balance)} em vale</span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

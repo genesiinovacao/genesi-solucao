@@ -143,6 +143,7 @@ export default function CloseCashModal({ sessionId, onClose, onClosed, syncBefor
               </label>
               <input type="number" step="0.01" min="0" autoFocus value={counted}
                      onChange={(e) => setCounted(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === 'Enter' && counted !== '') { e.preventDefault(); submitClose(); } }}
                      className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-white text-2xl text-center font-mono focus:border-blue-500 focus:outline-none" />
               {counted !== '' && !isNaN(Number(counted)) && (
                 <p className={`text-center text-sm mt-2 font-semibold ${Math.abs(Number(counted) - summary.expectedCash) < 0.005 ? 'text-emerald-400' : (Number(counted) > summary.expectedCash ? 'text-amber-400' : 'text-rose-400')}`}>

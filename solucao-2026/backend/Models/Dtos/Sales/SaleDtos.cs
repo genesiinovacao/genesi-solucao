@@ -7,7 +7,9 @@ public record SaleListItemDto(
     int ItemCount,
     decimal TotalAmount,
     string PaymentMethod,
-    string Status);
+    string Status,
+    // Operador logado no caixa quando a venda foi fechada
+    string? SellerName = null);
 
 public record SaleDetailDto(
     Guid Id,
@@ -24,7 +26,10 @@ public record SaleDetailDto(
     IReadOnlyList<SaleItemDto> Items,
     IReadOnlyList<SalePaymentDto> Payments,
     // Acréscimo (entrega, taxa) — já embutido em TotalAmount
-    decimal SurchargeAmount = 0);
+    decimal SurchargeAmount = 0,
+    // Operador logado no caixa quando a venda foi fechada
+    string? SellerName = null,
+    string? PosTerminalId = null);
 
 public record SaleItemDto(
     Guid Id,

@@ -18,11 +18,19 @@ public class ReturnsController : ControllerBase
 
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IOperatorAuthService _operators;
+    private readonly IAuditService _audit;
 
-    public ReturnsController(AppDbContext db, ITenantContext tenant)
+    public ReturnsController(
+        AppDbContext db,
+        ITenantContext tenant,
+        IOperatorAuthService operators,
+        IAuditService audit)
     {
         _db = db;
         _tenant = tenant;
+        _operators = operators;
+        _audit = audit;
     }
 
     /// <summary>
@@ -40,6 +48,20 @@ public class ReturnsController : ControllerBase
             return BadRequest(new { error = $"refundMethod inválido. Permitidos: {string.Join(", ", AllowedMethods)}" });
         if (req.Items is null || req.Items.Count == 0)
             return BadRequest(new { error = "Informe pelo menos um item para devolver." });
+
+        // Devolução devolve dinheiro e mexe no estoque — mesmo risco da sangria.
+        // O caixa opera, mas quem responde pela loja autoriza.
+        Models.Entities.User? supervisor = null;
+        if (_tenant.Role == "cashier")
+        {
+            supervisor = await _operators.FindSupervisorAsync(req.SupervisorCode, req.SupervisorPin, ct);
+            if (supervisor is null)
+                return StatusCode(403, new
+                {
+                    error = "Devolução exige autorização de um gerente ou administrador (código e PIN).",
+                    requiresSupervisor = true,
+                });
+        }
 
         var sale = await _db.Sales
             .Include(s => s.Items)
@@ -106,7 +128,9 @@ public class ReturnsController : ControllerBase
             UserId = _tenant.UserId,
             TotalRefund = totalRefund,
             RefundMethod = req.RefundMethod,
-            Reason = req.Reason,
+            Reason = supervisor is null
+                ? req.Reason
+                : $"{req.Reason} (autorizado por {supervisor.Name})".TrimStart(),
             IsPartial = isPartial,
             CreatedAt = DateTime.UtcNow,
         };
@@ -151,6 +175,14 @@ public class ReturnsController : ControllerBase
             customer.CreditBalance += totalRefund;
             customerCreditAfter = customer.CreditBalance;
         }
+
+        _audit.Log("sale.return", "sale", sale.Id, new
+        {
+            totalRefund,
+            refundMethod = req.RefundMethod,
+            isPartial,
+            authorizedBy = supervisor?.Name,
+        });
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

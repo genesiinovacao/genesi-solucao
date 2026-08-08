@@ -5,7 +5,10 @@ public record SaleReturnLineRequest(Guid SaleItemId, decimal Quantity);
 public record CreateSaleReturnRequest(
     List<SaleReturnLineRequest> Items,
     string RefundMethod,   // 'cash' | 'pix' | 'credit' | 'customer_credit'
-    string? Reason);
+    string? Reason,
+    // Devolução feita pelo caixa exige aval: código e PIN do gerente
+    string? SupervisorCode = null,
+    string? SupervisorPin = null);
 
 public record SaleReturnItemDto(
     Guid Id,

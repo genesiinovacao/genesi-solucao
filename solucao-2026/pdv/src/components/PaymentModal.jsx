@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
@@ -73,6 +73,17 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
     cash: '', pix: '', debit: '', credit: '', transfer: '', store_credit: '',
   });
 
+  // Um input por método, para as teclas de função poderem focar direto
+  const inputs = useRef({});
+  const focusMethod = (v) => {
+    const el = inputs.current[v];
+    if (el) { el.focus(); el.select(); }
+  };
+
+  // O caixa abre esta tela já com o dinheiro em foco: é o caso mais comum,
+  // e daí um Enter preenche o total e outro fecha a venda.
+  useEffect(() => { focusMethod('cash'); }, []);
+
   const confirm = () => {
     if (!covered) return;
     const payments = methods
@@ -94,13 +105,49 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
     });
   };
 
+  // F1..F6 escolhem a forma; Enter preenche o que falta e, já coberto, fecha
+  // a venda; Delete zera tudo. Nada aqui depende do mouse.
+  useEffect(() => {
+    const onKey = (e) => {
+      const fn = e.key.match(/^F([1-9]|1[0-2])$/);
+      if (fn) {
+        const m = methods[Number(fn[1]) - 1];
+        if (m) { e.preventDefault(); focusMethod(m.v); }
+        return;
+      }
+      // Delete só zera tudo quando não há texto para apagar — senão roubaria
+      // a tecla de quem está corrigindo um valor digitado errado.
+      if (e.key === 'Delete' && !(document.activeElement?.value || '')) {
+        e.preventDefault();
+        clearAll();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (covered) { confirm(); return; }
+        // Ainda falta: completa no campo em foco, ou no dinheiro se o foco
+        // estiver fora — poupa o operador de digitar o valor exato.
+        const focused = methods.find((m) => inputs.current[m.v] === document.activeElement);
+        fillRemaining(focused?.v || 'cash');
+        if (!focused) focusMethod('cash');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
       <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-3xl p-6">
         <div className="flex justify-between items-start mb-4">
           <div>
             <h2 className="text-xl font-bold text-white">💳 Forma de Pagamento</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Digite quanto o cliente vai pagar em cada forma. Pode misturar.</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Digite quanto o cliente vai pagar em cada forma. Pode misturar.
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              F1…F{methods.length} escolhe · Enter completa e confirma · Delete limpa · Esc cancela
+            </p>
           </div>
           <button onClick={onCancel} className="text-slate-400 hover:text-white text-3xl leading-none w-9 h-9 flex items-center justify-center">×</button>
         </div>
@@ -136,7 +183,7 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
 
         {/* ===== Cards de cada forma de pagamento ===== */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          {methods.map((m) => {
+          {methods.map((m, mi) => {
             const c = colorMap[m.color];
             const value = amounts[m.v];
             const has = numAmounts[m.v] > 0.005;
@@ -149,6 +196,9 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{m.icon}</span>
                     <span className={`font-bold text-sm ${has ? c.text : 'text-slate-300'}`}>{m.name}</span>
+                    <kbd className="text-[10px] px-1.5 py-0.5 bg-slate-800 rounded text-slate-400 font-mono">
+                      F{mi + 1}
+                    </kbd>
                   </div>
                   {remaining > 0.005 && !has && (
                     <button onClick={() => fillRemaining(m.v)}
@@ -160,7 +210,8 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
 
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base font-mono">R$</span>
-                  <input type="number" step="0.01" min="0" inputMode="decimal" value={value}
+                  <input ref={(el) => { inputs.current[m.v] = el; }}
+                         type="number" step="0.01" min="0" inputMode="decimal" value={value}
                          max={m.v === 'store_credit' ? creditBalance : undefined}
                          onChange={(e) => setAmounts((a) => ({ ...a, [m.v]: e.target.value }))}
                          placeholder="0,00"
@@ -213,11 +264,11 @@ export default function PaymentModal({ total, onCancel, onConfirm, creditBalance
           </button>
           <button onClick={clearAll}
                   className="px-5 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-lg text-sm">
-            🗑️ Limpar
+            🗑️ Limpar · Del
           </button>
           <button onClick={confirm} disabled={!covered}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg">
-            {covered ? '✅ Confirmar venda' : `Faltam ${brl(remaining)}`}
+            {covered ? '✅ Confirmar venda · Enter' : `Faltam ${brl(remaining)} · Enter completa`}
           </button>
         </div>
       </div>

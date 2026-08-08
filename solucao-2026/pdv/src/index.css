@@ -17,6 +17,18 @@ input, textarea {
   user-select: text;
 }
 
+/* Dica de atalho ao lado de cada ação. O caixa opera sem mouse: a tecla
+   precisa estar visível junto do botão, não só na tela de ajuda (F1). */
+kbd {
+  font-family: ui-monospace, 'Courier New', monospace;
+  font-size: 0.72em;
+  padding: 0.1em 0.4em;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #0f172a;
+  white-space: nowrap;
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
