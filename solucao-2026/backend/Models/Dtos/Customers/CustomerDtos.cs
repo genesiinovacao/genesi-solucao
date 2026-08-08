@@ -15,7 +15,9 @@ public record CustomerDto(
     string Tier,            // bronze / silver / gold (derivado de LoyaltyPoints)
     DateOnly? BirthDate,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    // Saldo de devolução que o cliente pode gastar como vale crédito no PDV
+    decimal CreditBalance = 0);
 
 public record CreateCustomerRequest(
     [Required, StringLength(255)] string Name,

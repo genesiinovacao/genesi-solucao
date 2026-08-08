@@ -11,6 +11,8 @@ const paymentLabel = {
   debit: '💳 Débito',
   mixed: '🔀 Misto',
   crediario: '📝 Crediário',
+  transfer: '🏦 Transferência',
+  store_credit: '🎟️ Vale crédito',
 };
 
 const statusBadge = (s) => {
@@ -243,6 +245,9 @@ export default function Sales() {
                     <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{brl(selected.subtotal)}</span></div>
                     {selected.discountAmount > 0 && (
                       <div className="flex justify-between text-emerald-600"><span>Desconto</span><span>- {brl(selected.discountAmount)}</span></div>
+                    )}
+                    {selected.surchargeAmount > 0 && (
+                      <div className="flex justify-between text-orange-600"><span>Acréscimo</span><span>+ {brl(selected.surchargeAmount)}</span></div>
                     )}
                     <div className="flex justify-between text-lg font-bold text-slate-800 pt-2 border-t mt-2">
                       <span>Total</span><span>{brl(selected.totalAmount)}</span>

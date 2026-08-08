@@ -87,6 +87,7 @@ public class SyncController : ControllerBase
                     SaleDate = dto.SaleDate,
                     Subtotal = dto.Subtotal,
                     DiscountAmount = dto.DiscountAmount,
+                    SurchargeAmount = dto.SurchargeAmount,
                     TotalAmount = dto.TotalAmount,
                     PaymentMethod = dto.PaymentMethod,
                     AmountReceived = dto.AmountReceived,
@@ -113,6 +114,26 @@ public class SyncController : ControllerBase
                 };
 
                 _db.Sales.Add(sale);
+
+                // Vale crédito: abate do saldo que o cliente ganhou em
+                // devoluções. Nunca deixa negativo — se o PDV mandou mais que
+                // o saldo (crédito usado noutro caixa), consome o que existe.
+                var storeCredit = sale.Payments
+                    .Where(p => p.Method == "store_credit")
+                    .Sum(p => p.Amount);
+
+                if (storeCredit > 0 && dto.CustomerId is { } customerId)
+                {
+                    var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId, ct);
+                    if (customer is not null)
+                    {
+                        var usado = Math.Min(storeCredit, customer.CreditBalance);
+                        customer.CreditBalance -= usado;
+                        _log.LogInformation(
+                            "Vale crédito: {Usado} abatido de {Cliente} (saldo restante {Saldo})",
+                            usado, customer.Name, customer.CreditBalance);
+                    }
+                }
 
                 // Baixa de estoque + movimentação (pode ficar negativo: vendas
                 // offline podem ultrapassar o saldo conhecido pelo servidor)
@@ -178,7 +199,9 @@ public record SaleSyncDto(
     string? PosTerminalId,
     Guid? CashSessionId,
     List<SaleItemSyncDto> Items,
-    List<SalePaymentSyncDto>? Payments);
+    List<SalePaymentSyncDto>? Payments,
+    // Opcional: PDV antigo não envia, e o padrão zero mantém o total correto
+    decimal SurchargeAmount = 0);
 
 public record SaleItemSyncDto(
     Guid? ProductId,

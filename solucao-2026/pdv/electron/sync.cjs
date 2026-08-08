@@ -60,6 +60,7 @@ async function runSync(apiBase, jwt) {
       saleDate:      sale.saleDateIso,
       subtotal:      sale.subtotal,
       discountAmount: sale.discountAmount,
+      surchargeAmount: sale.surchargeAmount || 0,
       totalAmount:   sale.totalAmount,
       paymentMethod: sale.paymentMethod,
       amountReceived: sale.amountReceived,

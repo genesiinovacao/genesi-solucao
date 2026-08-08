@@ -134,4 +134,81 @@ public class SyncControllerTests
         var response = await controller.SyncSales(new List<SaleSyncDto>(), default);
         Assert.IsType<BadRequestObjectResult>(response.Result);
     }
+
+    /// <summary>
+    /// Vale crédito precisa sair do saldo do cliente, senão a devolução gera
+    /// crédito infinito — o mesmo saldo seria gasto em toda venda.
+    /// </summary>
+    [Fact]
+    public async Task SyncSales_StoreCredit_DebitsCustomerBalance()
+    {
+        var (controller, db, _, tenantId, product) = Setup();
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Name = "Ana", CreditBalance = 50m,
+        };
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+
+        var dto = DemoSale(Guid.NewGuid(), product.Id) with
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = "mixed",
+            Payments = new List<SalePaymentSyncDto>
+            {
+                new("store_credit", 30m, null),
+                new("cash", 45m, null),
+            },
+        };
+
+        await controller.SyncSales(new List<SaleSyncDto> { dto }, default);
+
+        Assert.Equal(20m, (await db.Customers.SingleAsync()).CreditBalance);
+    }
+
+    /// <summary>
+    /// Saldo gasto noutro caixa enquanto o PDV estava offline: consome o que
+    /// existe em vez de deixar o cliente com crédito negativo.
+    /// </summary>
+    [Fact]
+    public async Task SyncSales_StoreCredit_NeverGoesNegative()
+    {
+        var (controller, db, _, tenantId, product) = Setup();
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Name = "Bruno", CreditBalance = 10m,
+        };
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+
+        var dto = DemoSale(Guid.NewGuid(), product.Id) with
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = "store_credit",
+            Payments = new List<SalePaymentSyncDto> { new("store_credit", 75m, null) },
+        };
+
+        await controller.SyncSales(new List<SaleSyncDto> { dto }, default);
+
+        Assert.Equal(0m, (await db.Customers.SingleAsync()).CreditBalance);
+    }
+
+    /// <summary>Acréscimo (entrega/taxa) precisa chegar gravado na venda.</summary>
+    [Fact]
+    public async Task SyncSales_PersistsSurchargeAmount()
+    {
+        var (controller, db, _, _, product) = Setup();
+
+        var dto = DemoSale(Guid.NewGuid(), product.Id) with
+        {
+            SurchargeAmount = 8m,
+            TotalAmount = 83m,
+        };
+
+        await controller.SyncSales(new List<SaleSyncDto> { dto }, default);
+
+        var sale = await db.Sales.SingleAsync();
+        Assert.Equal(8m, sale.SurchargeAmount);
+        Assert.Equal(83m, sale.TotalAmount);
+    }
 }

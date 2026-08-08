@@ -2,33 +2,51 @@ import { useState, useMemo } from 'react';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
-const methods = [
-  { v: 'cash',   icon: '💵', name: 'Dinheiro', color: 'emerald' },
-  { v: 'pix',    icon: '⚡', name: 'Pix',      color: 'cyan' },
-  { v: 'debit',  icon: '💳', name: 'Débito',   color: 'blue' },
-  { v: 'credit', icon: '💳', name: 'Crédito',  color: 'indigo' },
+const baseMethods = [
+  { v: 'cash',     icon: '💵', name: 'Dinheiro',      color: 'emerald' },
+  { v: 'pix',      icon: '⚡', name: 'Pix',           color: 'cyan' },
+  { v: 'debit',    icon: '💳', name: 'Débito',        color: 'blue' },
+  { v: 'credit',   icon: '💳', name: 'Crédito',       color: 'indigo' },
+  { v: 'transfer', icon: '🏦', name: 'Transferência', color: 'slate' },
 ];
+
+// Vale crédito só existe com cliente identificado que tenha saldo de devolução
+const storeCreditMethod = { v: 'store_credit', icon: '🎟️', name: 'Vale crédito', color: 'amber' };
 
 const colorMap = {
   emerald: { ring: 'ring-emerald-500', border: 'border-emerald-500', text: 'text-emerald-400', glow: 'shadow-emerald-900/40' },
   cyan:    { ring: 'ring-cyan-500',    border: 'border-cyan-500',    text: 'text-cyan-400',    glow: 'shadow-cyan-900/40' },
   blue:    { ring: 'ring-blue-500',    border: 'border-blue-500',    text: 'text-blue-400',    glow: 'shadow-blue-900/40' },
   indigo:  { ring: 'ring-indigo-500',  border: 'border-indigo-500',  text: 'text-indigo-400',  glow: 'shadow-indigo-900/40' },
+  slate:   { ring: 'ring-slate-400',   border: 'border-slate-400',   text: 'text-slate-300',   glow: 'shadow-slate-900/40' },
+  amber:   { ring: 'ring-amber-500',   border: 'border-amber-500',   text: 'text-amber-400',   glow: 'shadow-amber-900/40' },
 };
 
-export default function PaymentModal({ total, onCancel, onConfirm }) {
+export default function PaymentModal({ total, onCancel, onConfirm, creditBalance = 0 }) {
+  const methods = useMemo(
+    () => (creditBalance > 0 ? [...baseMethods, storeCreditMethod] : baseMethods),
+    [creditBalance]
+  );
+
   // Um valor por método (string para o input ser controlado)
-  const [amounts, setAmounts] = useState({ cash: '', pix: '', debit: '', credit: '' });
+  const [amounts, setAmounts] = useState({
+    cash: '', pix: '', debit: '', credit: '', transfer: '', store_credit: '',
+  });
 
   const numAmounts = useMemo(() => ({
-    cash:   Number(amounts.cash)   || 0,
-    pix:    Number(amounts.pix)    || 0,
-    debit:  Number(amounts.debit)  || 0,
-    credit: Number(amounts.credit) || 0,
-  }), [amounts]);
+    cash:         Number(amounts.cash)         || 0,
+    pix:          Number(amounts.pix)          || 0,
+    debit:        Number(amounts.debit)        || 0,
+    credit:       Number(amounts.credit)       || 0,
+    transfer:     Number(amounts.transfer)     || 0,
+    // Nunca deixa lançar mais vale do que o cliente tem
+    store_credit: Math.min(Number(amounts.store_credit) || 0, creditBalance),
+  }), [amounts, creditBalance]);
 
-  const paid = numAmounts.cash + numAmounts.pix + numAmounts.debit + numAmounts.credit;
-  const paidNonCash = numAmounts.pix + numAmounts.debit + numAmounts.credit;
+  const paid = numAmounts.cash + numAmounts.pix + numAmounts.debit
+             + numAmounts.credit + numAmounts.transfer + numAmounts.store_credit;
+  const paidNonCash = numAmounts.pix + numAmounts.debit + numAmounts.credit
+             + numAmounts.transfer + numAmounts.store_credit;
 
   // Falta sempre é em relação ao total da venda. Não considera troco como pago.
   // Mas se há dinheiro e dinheiro >= (total - paidNonCash), está coberto e o resto é troco.
@@ -44,12 +62,16 @@ export default function PaymentModal({ total, onCancel, onConfirm }) {
       setAmounts((a) => ({ ...a, cash: remainingForCash.toFixed(2) }));
     } else {
       // Pix/Cartão = quanto falta tirando o que já é não-dinheiro + cash
-      const slot = Math.max(0, total - paid + (Number(amounts[method]) || 0));
+      let slot = Math.max(0, total - paid + (Number(amounts[method]) || 0));
+      // O vale nunca ultrapassa o saldo do cliente
+      if (method === 'store_credit') slot = Math.min(slot, creditBalance);
       setAmounts((a) => ({ ...a, [method]: slot.toFixed(2) }));
     }
   };
 
-  const clearAll = () => setAmounts({ cash: '', pix: '', debit: '', credit: '' });
+  const clearAll = () => setAmounts({
+    cash: '', pix: '', debit: '', credit: '', transfer: '', store_credit: '',
+  });
 
   const confirm = () => {
     if (!covered) return;
@@ -139,6 +161,7 @@ export default function PaymentModal({ total, onCancel, onConfirm }) {
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base font-mono">R$</span>
                   <input type="number" step="0.01" min="0" inputMode="decimal" value={value}
+                         max={m.v === 'store_credit' ? creditBalance : undefined}
                          onChange={(e) => setAmounts((a) => ({ ...a, [m.v]: e.target.value }))}
                          placeholder="0,00"
                          className={`w-full pl-10 pr-3 py-3 bg-slate-950 border rounded-lg text-white text-xl font-mono text-right focus:outline-none ${
@@ -147,14 +170,18 @@ export default function PaymentModal({ total, onCancel, onConfirm }) {
                 </div>
 
                 {/* Hint do que esse campo significa */}
-                <p className="text-[10px] text-slate-500 mt-1.5 text-center">
+                <p className={`text-[10px] mt-1.5 text-center ${
+                  m.v === 'store_credit' ? 'text-amber-400/80' : 'text-slate-500'
+                }`}>
                   {m.v === 'cash'
                     ? (numAmounts.cash > remainingForCash
                        ? `Recebido ${brl(numAmounts.cash)} · Troco ${brl(numAmounts.cash - remainingForCash)}`
                        : 'Quanto o cliente entregou em cédulas/moedas')
-                    : m.v === 'pix'    ? 'Valor transferido via Pix'
-                    : m.v === 'debit'  ? 'Passado no cartão de débito'
-                    :                    'Passado no cartão de crédito'}
+                    : m.v === 'pix'          ? 'Valor transferido via Pix'
+                    : m.v === 'debit'        ? 'Passado no cartão de débito'
+                    : m.v === 'credit'       ? 'Passado no cartão de crédito'
+                    : m.v === 'transfer'     ? 'TED/DOC já confirmada na conta da loja'
+                    :                          `Saldo disponível: ${brl(creditBalance)}`}
                 </p>
               </div>
             );

@@ -13,7 +13,8 @@ const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency:
 const dt  = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
 const methodLabels = {
-  cash: 'Dinheiro', pix: 'Pix', credit: 'Crédito', debit: 'Débito', crediario: 'Crediário', mixed: 'Misto',
+  cash: 'Dinheiro', pix: 'Pix', credit: 'Crédito', debit: 'Débito', crediario: 'Crediário',
+  transfer: 'Transferência', store_credit: 'Vale crédito', mixed: 'Misto',
 };
 
 export default function Receipt({ sale, onClose, onPrint }) {
@@ -119,6 +120,7 @@ function ReceiptBody({ sale, tenantName }) {
       <div className="border-t border-dashed border-black my-2" />
       <Line label="Subtotal" value={brl(sale.subtotal)} />
       {sale.discountAmount > 0 && <Line label="Desconto" value={'- ' + brl(sale.discountAmount)} />}
+      {sale.surchargeAmount > 0 && <Line label="Acrescimo" value={'+ ' + brl(sale.surchargeAmount)} />}
       <Line label="TOTAL" value={brl(sale.totalAmount)} bold />
 
       <div className="border-t border-dashed border-black my-2" />

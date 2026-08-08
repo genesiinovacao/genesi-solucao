@@ -80,11 +80,11 @@ function registerDbIpc() {
 
       db.prepare('DELETE FROM customers').run();
       const insC = db.prepare(`INSERT INTO customers
-        (id, name, tax_id, phone, email, loyalty_points, total_spent, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        (id, name, tax_id, phone, email, loyalty_points, total_spent, credit_balance, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const c of customers) {
         insC.run(c.id, c.name, c.taxId, c.phone, c.email,
-                 c.loyaltyPoints, c.totalSpent, c.status);
+                 c.loyaltyPoints, c.totalSpent, c.creditBalance || 0, c.status);
       }
 
       if (settings) {
@@ -107,16 +107,28 @@ function registerDbIpc() {
     const tx = db.transaction(() => {
       db.prepare(`INSERT INTO local_sales
         (offline_sync_id, customer_id, sale_date_iso, subtotal, discount_amount,
-         total_amount, payment_method, amount_received, change_amount, payload_json, synced)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`).run(
+         surcharge_amount, total_amount, payment_method, amount_received,
+         change_amount, payload_json, synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`).run(
           sale.offlineSyncId, sale.customerId, sale.saleDateIso,
-          sale.subtotal, sale.discountAmount, sale.totalAmount,
+          sale.subtotal, sale.discountAmount, sale.surchargeAmount || 0, sale.totalAmount,
           sale.paymentMethod, sale.amountReceived, sale.changeAmount,
           JSON.stringify(sale));
 
       // Update local stock so the next render reflects what was sold
       const dec = db.prepare('UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?');
       for (const it of sale.items) dec.run(it.quantity, it.productId);
+
+      // Vale crédito gasto: abate localmente para o operador não conseguir
+      // usar o mesmo saldo duas vezes antes do próximo snapshot do servidor.
+      const vale = (sale.payments || [])
+        .filter((p) => p.method === 'store_credit')
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
+      if (vale > 0 && sale.customerId) {
+        db.prepare(`UPDATE customers
+                    SET credit_balance = MAX(0, credit_balance - ?)
+                    WHERE id = ?`).run(vale, sale.customerId);
+      }
     });
     tx();
     return { ok: true, offlineSyncId: sale.offlineSyncId };

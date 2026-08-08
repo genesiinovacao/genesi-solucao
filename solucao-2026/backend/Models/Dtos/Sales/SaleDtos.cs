@@ -22,7 +22,9 @@ public record SaleDetailDto(
     decimal? ChangeAmount,
     string Status,
     IReadOnlyList<SaleItemDto> Items,
-    IReadOnlyList<SalePaymentDto> Payments);
+    IReadOnlyList<SalePaymentDto> Payments,
+    // Acréscimo (entrega, taxa) — já embutido em TotalAmount
+    decimal SurchargeAmount = 0);
 
 public record SaleItemDto(
     Guid Id,

@@ -30,7 +30,7 @@ public class CustomersController : ControllerBase
     private static CustomerDto ToDto(Customer c) => new(
         c.Id, c.Name, c.TaxId, c.Email, c.Phone, c.Address,
         c.LoyaltyPoints, c.TotalSpent, c.Status, Tier(c.LoyaltyPoints),
-        c.BirthDate, c.CreatedAt, c.UpdatedAt);
+        c.BirthDate, c.CreatedAt, c.UpdatedAt, c.CreditBalance);
 
     [HttpGet]
     public async Task<ActionResult<CustomerListResponse>> List(

@@ -15,6 +15,7 @@ const dt = (iso) => new Date(iso).toLocaleString('pt-BR',
 const methodLabels = {
   cash: 'Dinheiro', pix: 'Pix', credit: 'Crédito',
   debit: 'Débito', crediario: 'Crediário', mixed: 'Misto',
+  transfer: 'Transferência', store_credit: 'Vale crédito',
 };
 
 function escapeHtml(s) {
@@ -122,6 +123,7 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     <div class="hr"></div>
     <div class="row"><span>Subtotal</span><span>${brl(sale.subtotal)}</span></div>
     ${sale.discountAmount > 0 ? `<div class="row"><span>Desconto</span><span>- ${brl(sale.discountAmount)}</span></div>` : ''}
+    ${sale.surchargeAmount > 0 ? `<div class="row"><span>Acréscimo</span><span>+ ${brl(sale.surchargeAmount)}</span></div>` : ''}
     <div class="row total"><span>TOTAL</span><span>${brl(sale.totalAmount)}</span></div>
 
     <div class="hr"></div>

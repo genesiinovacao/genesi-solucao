@@ -220,7 +220,15 @@ export default function Customers() {
                     <div className="text-xs text-slate-400">{c.email || '—'}</div>
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-blue-600">{c.loyaltyPoints}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-800">{brl(c.totalSpent)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-800">
+                    {brl(c.totalSpent)}
+                    {c.creditBalance > 0 && (
+                      <div className="text-xs font-normal text-amber-600"
+                           title="Crédito de devolução — o cliente pode gastar no PDV">
+                        🎟️ {brl(c.creditBalance)} em vale
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{tierBadge(c.tier)}</td>
                   <td className="px-4 py-3">
                     {c.status === 'active'

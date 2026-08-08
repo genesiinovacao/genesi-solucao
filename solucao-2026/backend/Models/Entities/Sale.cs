@@ -9,6 +9,8 @@ public class Sale
     public DateTime SaleDate { get; set; }
     public decimal Subtotal { get; set; }
     public decimal DiscountAmount { get; set; }
+    /// <summary>Acréscimo (entrega, juros, taxa repassada) somado ao total.</summary>
+    public decimal SurchargeAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public string PaymentMethod { get; set; } = "cash";
     public decimal? AmountReceived { get; set; }

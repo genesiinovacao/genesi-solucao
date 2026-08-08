@@ -26,6 +26,7 @@ export default function PDV() {
   const [category, setCategory] = useState('Todos');
   const [cart, setCart] = useState([]);
   const [discountPct, setDiscountPct] = useState(0);
+  const [surcharge, setSurcharge] = useState('');   // acréscimo em R$ (entrega, taxa)
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   // ===== System state =====
@@ -338,7 +339,10 @@ export default function PDV() {
   const effectivePct = Math.max(Number(discountPct) || 0, totalPromo?.discountPercent || 0);
   const manualDiscount = afterPromo * effectivePct / 100;
   const discountAmount = promoDiscount + manualDiscount;
-  const total = Math.max(0, subtotal - discountAmount);
+  // Acréscimo (entrega, taxa repassada) entra depois do desconto e nunca é
+  // abatido por ele — é cobrança extra, não parte da mercadoria.
+  const surchargeAmount = Math.max(0, Number(surcharge) || 0);
+  const total = Math.max(0, subtotal - discountAmount) + surchargeAmount;
 
   function showToast(text, kind = 'info', ms = 3000) {
     setToast({ text, kind });
@@ -390,7 +394,9 @@ export default function PDV() {
   );
 
   const removeItem = (id) => setCart((prev) => prev.filter((i) => i.productId !== id));
-  const clearCart = () => { setCart([]); setDiscountPct(0); setSelectedCustomer(null); };
+  const clearCart = () => {
+    setCart([]); setDiscountPct(0); setSurcharge(''); setSelectedCustomer(null);
+  };
 
   // ---- Payment flow ----
   const openPayment = () => {
@@ -409,6 +415,7 @@ export default function PDV() {
       cashSessionId: currentSession?.id ?? null,
       subtotal,
       discountAmount,
+      surchargeAmount,
       totalAmount: total,
       paymentMethod: paymentInfo.paymentMethod,
       amountReceived: paymentInfo.amountReceived,
@@ -669,6 +676,21 @@ export default function PDV() {
               <span>- {brl(discountAmount)}</span>
             </div>
           )}
+          <div className="flex justify-between items-center text-sm">
+            <label className="text-slate-400" title="Entrega, taxa de serviço ou juros repassados">
+              Acréscimo (R$)
+            </label>
+            <input type="number" min="0" step="0.5" value={surcharge}
+                   onChange={(e) => setSurcharge(e.target.value)}
+                   placeholder="0,00"
+                   className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-orange-300 font-mono" />
+          </div>
+          {surchargeAmount > 0 && (
+            <div className="flex justify-between text-xs text-orange-300">
+              <span>Acréscimo</span>
+              <span>+ {brl(surchargeAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-end pt-2 border-t border-slate-800">
             <span className="text-sm font-medium">TOTAL</span>
             <span className="text-3xl font-extrabold text-blue-400">{brl(total)}</span>
@@ -699,7 +721,10 @@ export default function PDV() {
       )}
 
       {showPayment && (
-        <PaymentModal total={total} onCancel={() => setShowPayment(false)} onConfirm={finalizeSale} />
+        <PaymentModal total={total}
+                      creditBalance={Number(selectedCustomer?.credit_balance) || 0}
+                      onCancel={() => setShowPayment(false)}
+                      onConfirm={finalizeSale} />
       )}
 
       {showCashMovement && currentSession && (
@@ -758,7 +783,12 @@ export default function PDV() {
                 <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerPickerOpen(false); }}
                         className="block w-full text-left px-4 py-3 hover:bg-slate-800 rounded">
                   <div className="font-medium">{c.name}</div>
-                  <div className="text-xs text-slate-400">{c.tax_id || c.phone || '—'} · {c.loyalty_points} pts</div>
+                  <div className="text-xs text-slate-400">
+                    {c.tax_id || c.phone || '—'} · {c.loyalty_points} pts
+                    {Number(c.credit_balance) > 0 && (
+                      <span className="text-amber-400"> · 🎟️ {brl(c.credit_balance)} em vale</span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>

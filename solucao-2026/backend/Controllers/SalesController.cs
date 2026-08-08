@@ -99,6 +99,7 @@ public class SalesController : ControllerBase
             s.Items.Select(i => new SaleItemDto(
                 i.Id, i.ProductId, i.ProductName, i.Quantity,
                 i.UnitPrice, i.DiscountAmount, i.TotalPrice)).ToList(),
-            s.Payments.Select(p => new SalePaymentDto(p.Id, p.Method, p.Amount)).ToList()));
+            s.Payments.Select(p => new SalePaymentDto(p.Id, p.Method, p.Amount)).ToList(),
+            s.SurchargeAmount));
     }
 }

@@ -17,9 +17,26 @@ function initDb() {
   db.pragma('foreign_keys = ON');
 
   db.exec(SCHEMA);
+  migrate(db);
 
   console.log(`[pdv-db] ready at ${dbPath}`);
   return db;
+}
+
+/**
+ * CREATE TABLE IF NOT EXISTS não altera tabelas já criadas — o banco do
+ * operador é antigo e sobrevive à atualização. Toda coluna nova precisa
+ * entrar aqui, senão só instalações limpas a recebem.
+ */
+function migrate(db) {
+  const addColumn = (table, column, ddl) => {
+    const has = db.prepare(`PRAGMA table_info(${table})`).all()
+      .some((c) => c.name === column);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  };
+
+  addColumn('customers', 'credit_balance', 'credit_balance REAL NOT NULL DEFAULT 0');
+  addColumn('local_sales', 'surcharge_amount', 'surcharge_amount REAL NOT NULL DEFAULT 0');
 }
 
 function getDb() {
@@ -55,6 +72,7 @@ CREATE TABLE IF NOT EXISTS customers (
     email           TEXT,
     loyalty_points  INTEGER NOT NULL DEFAULT 0,
     total_spent     REAL NOT NULL DEFAULT 0,
+    credit_balance  REAL NOT NULL DEFAULT 0,
     status          TEXT NOT NULL DEFAULT 'active'
 );
 CREATE INDEX IF NOT EXISTS idx_customers_tax_id ON customers(tax_id);
