@@ -102,6 +102,49 @@ public class QuotesControllerTests
         Assert.False(dto.IsExpired);
     }
 
+    /// <summary>
+    /// Contrato ou tabela combinada com oficina vale até a loja avisar: sem
+    /// prazo é NULL, não uma data futura inventada que mentiria no papel.
+    /// </summary>
+    [Fact]
+    public async Task Create_NoExpiry_LeavesValidityNull()
+    {
+        var (controller, db, _, product) = Setup();
+
+        var ok = Assert.IsType<OkObjectResult>(
+            (await controller.Create(Request(product.Id) with { NoExpiry = true }, default)).Result);
+
+        var dto = (QuoteDto)ok.Value!;
+        Assert.Null(dto.ValidUntil);
+        Assert.False(dto.IsExpired);
+        Assert.Null((await db.Quotes.SingleAsync()).ValidUntil);
+    }
+
+    /// <summary>Sem prazo nunca vence, nem consultado meses depois.</summary>
+    [Fact]
+    public async Task List_NoExpiryQuote_IsNeverExpired()
+    {
+        var (controller, _, _, product) = Setup();
+        await controller.Create(Request(product.Id) with { NoExpiry = true }, default);
+
+        var ok = Assert.IsType<OkObjectResult>((await controller.List(ct: default)).Result);
+        var row = Assert.Single(((QuoteListResponse)ok.Value!).Items);
+        Assert.Null(row.ValidUntil);
+        Assert.False(row.IsExpired);
+    }
+
+    [Fact]
+    public async Task Create_RecordsSeller()
+    {
+        var (controller, _, _, product) = Setup();
+
+        var ok = Assert.IsType<OkObjectResult>(
+            (await controller.Create(Request(product.Id), default)).Result);
+
+        // O papel entregue ao cliente precisa dizer quem atendeu
+        Assert.Equal("Caixa 1", ((QuoteDto)ok.Value!).SellerName);
+    }
+
     [Fact]
     public async Task Create_WithoutItems_IsRejected()
     {

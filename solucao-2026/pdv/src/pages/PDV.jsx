@@ -1012,6 +1012,7 @@ export default function PDV() {
           total={total}
           selectedCustomer={selectedCustomer}
           tenantName={storeName || user?.tenantName}
+          sellerName={currentUser?.name}
           onClose={() => { setShowQuote(false); searchRef.current?.focus(); }}
           onLoadQuote={loadQuoteIntoCart}
           onSaved={(_quote, message) => {

@@ -74,7 +74,7 @@ public class QuotesController : ControllerBase
 
         var items = pageData.Select(p => new QuoteListItemDto(
             p.Id, p.Number, p.CreatedAt, p.ValidUntil,
-            p.Status == "open" && p.ValidUntil < today,
+            p.Status == "open" && p.ValidUntil is { } v && v < today,
             p.CustomerName,
             p.UserId is null ? null : sellerNames.GetValueOrDefault(p.UserId.Value),
             p.ItemCount, p.TotalAmount, p.Status)).ToList();
@@ -103,6 +103,7 @@ public class QuotesController : ControllerBase
             return BadRequest(new { error = "Orçamento sem itens." });
 
         var validDays = req.ValidDays > 0 ? Math.Min(req.ValidDays, 365) : DefaultValidDays;
+        DateOnly? validUntil = req.NoExpiry ? null : SubscriptionCycle.Today().AddDays(validDays);
 
         // Transação para o sequencial não colidir entre dois caixas orçando
         // ao mesmo tempo — o índice único (tenant_id, number) é a garantia.
@@ -126,7 +127,7 @@ public class QuotesController : ControllerBase
             DiscountAmount = req.DiscountAmount,
             SurchargeAmount = req.SurchargeAmount,
             TotalAmount = req.TotalAmount,
-            ValidUntil = SubscriptionCycle.Today().AddDays(validDays),
+            ValidUntil = validUntil,
             Status = "open",
             Notes = req.Notes,
             CreatedAt = DateTime.UtcNow,
@@ -188,7 +189,7 @@ public class QuotesController : ControllerBase
 
         return new QuoteDto(
             q.Id, q.Number, q.CreatedAt, q.ValidUntil,
-            q.Status == "open" && q.ValidUntil < SubscriptionCycle.Today(),
+            q.Status == "open" && q.ValidUntil is { } v && v < SubscriptionCycle.Today(),
             q.CustomerId, q.CustomerName, q.CustomerPhone, sellerName,
             q.Subtotal, q.DiscountAmount, q.SurchargeAmount, q.TotalAmount,
             q.Status, q.ConvertedSaleId, q.Notes,

@@ -49,6 +49,17 @@ const GROUPS = [
     ],
   },
   {
+    title: 'Orçamento (F11)',
+    items: [
+      ['F2', 'Aba Novo'],
+      ['F3', 'Aba Salvos'],
+      ['F10', 'Salvar e imprimir'],
+      ['↑ ↓', 'Escolher o salvo'],
+      ['Enter', 'Devolver ao carrinho'],
+      ['F4', 'Reimprimir o destacado'],
+    ],
+  },
+  {
     title: 'Sempre',
     items: [
       ['Esc', 'Fechar a janela aberta'],

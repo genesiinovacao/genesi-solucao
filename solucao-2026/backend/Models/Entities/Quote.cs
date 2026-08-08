@@ -19,8 +19,11 @@ public class Quote
     public decimal DiscountAmount { get; set; }
     public decimal SurchargeAmount { get; set; }
     public decimal TotalAmount { get; set; }
-    /// <summary>Preço de peça muda: sem validade o cliente cobra valor antigo.</summary>
-    public DateOnly ValidUntil { get; set; }
+    /// <summary>
+    /// Preço de peça muda, então o padrão é ter prazo. NULL = sem validade,
+    /// para contrato ou tabela combinada que vale até a loja avisar.
+    /// </summary>
+    public DateOnly? ValidUntil { get; set; }
     public string Status { get; set; } = "open";
     public Guid? ConvertedSaleId { get; set; }
     public string? Notes { get; set; }

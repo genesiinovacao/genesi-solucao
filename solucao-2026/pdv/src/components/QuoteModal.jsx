@@ -15,7 +15,7 @@ const dateBr = (ymd) => String(ymd || '').split('-').reverse().join('/');
 
 export default function QuoteModal({
   cart, subtotal, discountAmount, surchargeAmount, total,
-  selectedCustomer, tenantName, onClose, onLoadQuote, onSaved,
+  selectedCustomer, tenantName, sellerName, onClose, onLoadQuote, onSaved,
 }) {
   const hasCart = cart.length > 0;
   const [tab, setTab] = useState(hasCart ? 'new' : 'saved');
@@ -23,9 +23,12 @@ export default function QuoteModal({
   // ---- Aba "Novo" ----
   const [name, setName] = useState(selectedCustomer?.name || '');
   const [phone, setPhone] = useState(selectedCustomer?.phone || '');
+  // 0 = sem prazo de validade
   const [validDays, setValidDays] = useState(7);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const nameRef = useRef(null);
+  const searchRef = useRef(null);
 
   // ---- Aba "Salvos" ----
   const [list, setList] = useState([]);
@@ -76,7 +79,9 @@ export default function QuoteModal({
         validUntil: quote.validUntil,
         customerName: quote.customerName,
         customerPhone: quote.customerPhone,
-        sellerName: quote.sellerName,
+        // Quem atendeu tem de sair no papel; o operador logado é a garantia
+        // caso o servidor não consiga resolver o nome do usuário.
+        sellerName: quote.sellerName || sellerName || null,
         subtotal: quote.subtotal,
         discountAmount: quote.discountAmount,
         surchargeAmount: quote.surchargeAmount,
@@ -113,6 +118,7 @@ export default function QuoteModal({
         subtotal, discountAmount, surchargeAmount, totalAmount: total,
         notes: notes.trim() || null,
         validDays: Number(validDays) || 7,
+        noExpiry: Number(validDays) === 0,
       });
 
       setStatus(`Orçamento nº ${data.number} salvo. Imprimindo…`);
@@ -161,10 +167,44 @@ export default function QuoteModal({
   };
 
   const validUntilPreview = useMemo(() => {
+    if (Number(validDays) === 0) return null;
     const d = new Date();
-    d.setDate(d.getDate() + (Number(validDays) || 7));
+    d.setDate(d.getDate() + Number(validDays));
     return d.toLocaleDateString('pt-BR');
   }, [validDays]);
+
+  /**
+   * Atalhos da tela. O balcão trabalha sem mouse igual ao caixa: trocar de
+   * aba, salvar e reimprimir precisam de tecla. Esc é tratado pelo PDV.
+   */
+  useEffect(() => {
+    const onKey = (e) => {
+      switch (e.key) {
+        case 'F2':
+          if (!hasCart) return;
+          e.preventDefault();
+          setTab('new');
+          setTimeout(() => nameRef.current?.focus(), 0);
+          return;
+        case 'F3':
+          e.preventDefault();
+          setTab('saved');
+          setTimeout(() => searchRef.current?.focus(), 0);
+          return;
+        case 'F4':
+          // Reimprime o destacado sem sair da lista
+          if (tab === 'saved' && list[safeIdx]) { e.preventDefault(); reprint(list[safeIdx]); }
+          return;
+        case 'F10':
+          if (tab === 'new' && hasCart && !saving) { e.preventDefault(); save(); }
+          return;
+        default:
+          return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print"
@@ -177,6 +217,12 @@ export default function QuoteModal({
             <p className="text-xs text-slate-400 mt-1">
               Não baixa estoque nem entra no caixa — só vira venda quando o cliente fechar.
             </p>
+            {sellerName && (
+              <p className="text-xs text-slate-300 mt-1">
+                Vendedor: <span className="font-medium text-white">{sellerName}</span>
+                <span className="text-slate-500"> · sai impresso no orçamento</span>
+              </p>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-3xl leading-none">×</button>
         </header>
@@ -187,12 +233,13 @@ export default function QuoteModal({
                     tab === 'new' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
                   } ${!hasCart ? 'opacity-40 cursor-not-allowed' : ''}`}>
             Novo {hasCart ? `(${cart.length} itens · ${brl(total)})` : '(carrinho vazio)'}
+            <kbd className="ml-1.5 opacity-60">F2</kbd>
           </button>
           <button onClick={() => setTab('saved')}
                   className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${
                     tab === 'saved' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
                   }`}>
-            Salvos
+            Salvos <kbd className="ml-1.5 opacity-60">F3</kbd>
           </button>
         </div>
 
@@ -212,7 +259,7 @@ export default function QuoteModal({
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                     Cliente
                   </label>
-                  <input autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)}
+                  <input ref={nameRef} autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)}
                          maxLength={255} placeholder="Nome de quem leva o papel"
                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-blue-500 focus:outline-none" />
                 </div>
@@ -230,7 +277,7 @@ export default function QuoteModal({
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
                   Validade
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {[3, 7, 15, 30].map((d) => (
                     <button key={d} type="button" onClick={() => setValidDays(d)}
                             className={`px-4 py-2 rounded-lg text-sm border-2 transition ${
@@ -240,10 +287,22 @@ export default function QuoteModal({
                       {d} dias
                     </button>
                   ))}
+                  <button type="button" onClick={() => setValidDays(0)}
+                          className={`px-4 py-2 rounded-lg text-sm border-2 transition ${
+                            Number(validDays) === 0
+                              ? 'border-amber-500 bg-amber-500/15 text-white font-semibold'
+                              : 'border-slate-700 text-slate-300 hover:border-slate-600'}`}>
+                    Sem validade
+                  </button>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1.5">
-                  Vale até <span className="text-slate-200 font-medium">{validUntilPreview}</span> —
-                  depois disso o preço da peça pode ter mudado.
+                  {validUntilPreview ? (
+                    <>Vale até <span className="text-slate-200 font-medium">{validUntilPreview}</span> —
+                    depois disso o preço da peça pode ter mudado.</>
+                  ) : (
+                    <>Sai impresso como <span className="text-amber-300 font-medium">sem prazo</span> — o
+                    preço fica valendo até a loja avisar o contrário.</>
+                  )}
                 </p>
               </div>
 
@@ -280,7 +339,7 @@ export default function QuoteModal({
                 </button>
                 <button onClick={save} disabled={saving || !hasCart}
                         className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold rounded-lg text-sm">
-                  {saving ? 'Salvando…' : '📄 Salvar e imprimir'}
+                  {saving ? 'Salvando…' : '📄 Salvar e imprimir · F10'}
                 </button>
               </div>
             </footer>
@@ -291,12 +350,12 @@ export default function QuoteModal({
         {tab === 'saved' && (
           <>
             <div className="p-5 border-b border-slate-800">
-              <input autoFocus type="text" value={term} onKeyDown={onListKey}
+              <input ref={searchRef} autoFocus type="text" value={term} onKeyDown={onListKey}
                      onChange={(e) => setTerm(e.target.value)}
                      placeholder="🔍 Número do orçamento ou nome do cliente…"
                      className="w-full bg-slate-950 border border-slate-700 px-4 py-3 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none" />
               <p className="text-[11px] text-slate-500 mt-2">
-                ↑ ↓ escolhe · Enter devolve os itens ao carrinho · Esc fecha
+                ↑ ↓ escolhe · Enter devolve os itens ao carrinho · F4 reimprime · Esc fecha
               </p>
             </div>
 
@@ -314,9 +373,13 @@ export default function QuoteModal({
                   <button onClick={() => openQuote(q)} className="flex-1 min-w-0 text-left">
                     <div className="font-mono text-sm text-blue-400">
                       Nº {q.number}
-                      {q.isExpired && (
+                      {q.isExpired ? (
                         <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">
                           vencido em {dateBr(q.validUntil)}
+                        </span>
+                      ) : !q.validUntil && (
+                        <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                          sem validade
                         </span>
                       )}
                     </div>

@@ -21,7 +21,9 @@ public record CreateQuoteRequest(
     decimal TotalAmount,
     string? Notes,
     /// <summary>Dias de validade. Zero cai no padrão da loja (7).</summary>
-    int ValidDays = 0);
+    int ValidDays = 0,
+    /// <summary>Orçamento sem prazo — ignora ValidDays.</summary>
+    bool NoExpiry = false);
 
 public record QuoteItemDto(
     Guid Id,
@@ -36,7 +38,7 @@ public record QuoteDto(
     Guid Id,
     long Number,
     DateTime CreatedAt,
-    DateOnly ValidUntil,
+    DateOnly? ValidUntil,
     bool IsExpired,
     Guid? CustomerId,
     string? CustomerName,
@@ -55,7 +57,7 @@ public record QuoteListItemDto(
     Guid Id,
     long Number,
     DateTime CreatedAt,
-    DateOnly ValidUntil,
+    DateOnly? ValidUntil,
     bool IsExpired,
     string? CustomerName,
     string? SellerName,

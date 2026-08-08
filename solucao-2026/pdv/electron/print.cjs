@@ -159,7 +159,11 @@ function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
     </div>
   `).join('');
 
-  const validUntil = String(quote.validUntil || '').split('-').reverse().join('/');
+  // Sem validade é decisão da loja, não falha de preenchimento: o papel diz
+  // isso com todas as letras para o cliente não achar que faltou a data.
+  const validLabel = quote.validUntil
+    ? `Válido até ${String(quote.validUntil).split('-').reverse().join('/')}`
+    : 'Sem prazo de validade';
 
   return `<!DOCTYPE html>
 <html><head>
@@ -199,7 +203,7 @@ function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
     <div class="box b">Nº ${escapeHtml(String(quote.number ?? '—'))}</div>
     ${quote.customerName ? `<div class="small">Cliente: ${escapeHtml(quote.customerName)}</div>` : ''}
     ${quote.customerPhone ? `<div class="small">Fone: ${escapeHtml(quote.customerPhone)}</div>` : ''}
-    ${quote.sellerName ? `<div class="small">Vendedor: ${escapeHtml(quote.sellerName)}</div>` : ''}
+    <div class="small">Vendedor: ${escapeHtml(quote.sellerName || 'não identificado')}</div>
     <div class="hr"></div>
 
     ${itemsHtml}
@@ -210,7 +214,7 @@ function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
     ${quote.surchargeAmount > 0 ? `<div class="row"><span>Acréscimo</span><span>+ ${brl(quote.surchargeAmount)}</span></div>` : ''}
     <div class="row total"><span>TOTAL</span><span>${brl(quote.totalAmount)}</span></div>
 
-    <div class="box b">Válido até ${escapeHtml(validUntil)}</div>
+    <div class="box b">${escapeHtml(validLabel)}</div>
     ${quote.notes ? `<div class="small">Obs: ${escapeHtml(quote.notes)}</div>` : ''}
 
     <div class="hr"></div>
