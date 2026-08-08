@@ -17,6 +17,24 @@ import Receipt from '../components/Receipt';
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
+/**
+ * Separa o multiplicador do termo: "12*7891234" → { times: 12, term: '7891234' }.
+ * Usado tanto pelo lançamento quanto pela grade de produtos — sem tirar o
+ * prefixo do filtro, a tela dizia "nenhum produto encontrado" enquanto o
+ * operador digitava "2*Suco", mesmo com o Enter funcionando.
+ *
+ * Só o asterisco multiplica. Aceitar "x" também parecia gentileza, mas
+ * "2x4" é nome de parafuso, de madeira e de mangueira: o PDV lançaria duas
+ * unidades onde o operador quis uma. Quantidade errada em venda é dinheiro
+ * errado, e o "*" é o que o caixa já tem no teclado numérico.
+ */
+function parseQuantityPrefix(raw) {
+  const text = (raw || '').trim();
+  const m = text.match(/^(\d+)\s*\*\s*(.+)$/);
+  if (!m) return { times: 1, term: text };
+  return { times: Math.min(999, Number(m[1]) || 1), term: m[2].trim() };
+}
+
 export default function PDV() {
   const navigate = useNavigate();
   const user = auth.getUser();
@@ -375,10 +393,21 @@ export default function PDV() {
     return ['Todos', ...Array.from(set).sort()];
   }, [products]);
 
+  // A grade responde às duas leituras do que está digitado: "2*Suco" filtra
+  // por "Suco", mas "2x4" continua achando o parafuso 2x4 pelo texto cru.
   const filteredProducts = useMemo(() => {
-    const s = search.trim().toLowerCase();
+    const raw = search.trim().toLowerCase();
+    const stripped = parseQuantityPrefix(search).term.toLowerCase();
     return products.filter((p) => {
-      const matchSearch = !s || p.name.toLowerCase().includes(s) || p.barcode === search.trim() || p.sku === search.trim();
+      // SKU é cadastrado em maiúsculas e digitado como der: comparar sem
+      // normalizar os dois lados faria o código interno não achar nada.
+      const name = p.name.toLowerCase();
+      const code = (p.barcode || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const matchSearch = !raw
+        || name.includes(raw) || name.includes(stripped)
+        || code === raw || code === stripped
+        || sku === raw || sku === stripped;
       const matchCat = category === 'Todos' || p.category === category;
       return matchSearch && matchCat && p.is_active;
     });
@@ -389,33 +418,44 @@ export default function PDV() {
    * o leitor "digita" o código inteiro em milissegundos e o Enter chega
    * antes do React reprocessar — usar o state perderia os últimos dígitos.
    * Código de barras e SKU são exatos e ignoram o filtro de categoria.
+   *
+   * O texto cru é tentado antes do multiplicador: um SKU que por acaso
+   * comece com "2x" tem de vencer a leitura de "2 unidades de x".
    */
   const handleScan = (rawTerm) => {
-    let term = (rawTerm || '').trim();
-    if (!term) return;
+    const raw = (rawTerm || '').trim();
+    if (!raw) return;
 
-    // Multiplicador "12*7891234567895": quantidade antes do código, do jeito
-    // que o caixa já faz em qualquer PDV. Evita bipar 12 vezes a mesma água.
-    let times = 1;
-    const mult = term.match(/^(\d+)\s*[*xX]\s*(.+)$/);
-    if (mult) {
-      times = Math.min(999, Number(mult[1]) || 1);
-      term = mult[2].trim();
+    // Leitor manda o código como está; o operador digita o SKU como quer.
+    // A comparação normaliza os dois lados para não depender disso.
+    const codeOf = (p) => (p.barcode || '').toLowerCase();
+    const skuOf = (p) => (p.sku || '').toLowerCase();
+    const matchesCode = (p, v) => codeOf(p) === v || skuOf(p) === v;
+
+    const rawLower = raw.toLowerCase();
+    const exactRaw = products.find((p) => p.is_active && matchesCode(p, rawLower));
+    if (exactRaw) { addToCart(exactRaw, 1); return; }
+
+    const { times, term } = parseQuantityPrefix(raw);
+
+    const exact = products.find((p) => p.is_active && matchesCode(p, term.toLowerCase()));
+    if (exact) { addToCart(exact, times); return; }
+
+    const byName = (needle) => {
+      const lower = needle.toLowerCase();
+      return products.filter((p) => p.is_active && p.name.toLowerCase().includes(lower));
+    };
+
+    const byStripped = byName(term);
+    if (byStripped.length === 1) { addToCart(byStripped[0], times); return; }
+
+    // "2x4" achando o parafuso pelo nome inteiro: uma unidade, não duas
+    if (times > 1) {
+      const byRaw = byName(raw);
+      if (byRaw.length === 1) { addToCart(byRaw[0], 1); return; }
     }
 
-    const exact = products.find((p) => p.is_active && (p.barcode === term || p.sku === term));
-    if (exact) {
-      addToCart(exact, times);
-      return;
-    }
-
-    const lower = term.toLowerCase();
-    const byName = products.filter((p) => p.is_active && p.name.toLowerCase().includes(lower));
-    if (byName.length === 1) {
-      addToCart(byName[0], times);
-      return;
-    }
-    if (byName.length === 0) {
+    if (byStripped.length === 0) {
       // Sem isso o operador não sabe se o leitor falhou ou se falta cadastro
       showToast(`Nenhum produto com o código "${term}". Cadastre-o no dashboard.`, 'error', 5000);
       setSearch('');
