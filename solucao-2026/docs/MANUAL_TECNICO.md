@@ -73,7 +73,41 @@ O front reage ao `requiresSupervisor` mostrando os campos de código e PIN e
 reenviando a mesma requisição. Quem autorizou fica no motivo do lançamento e
 no `audit_log`.
 
-## 5. Impressão térmica
+## 5. Configuração do PDV pela loja
+
+Duas colunas em `tenants` (migração 20) mudam o comportamento do caixa:
+
+| Coluna | Efeito |
+|---|---|
+| `pdv_shortcuts` | Mapa JSON ação → tecla. Nulo = padrão de `pdv/src/lib/shortcuts.js`. |
+| `allow_sale_without_stock` | Libera vender item sem saldo, mediante aval de gerente. |
+
+O PDV recebe as duas pelo snapshot de settings e aplica sem precisar de
+versão nova. `resolveShortcuts()` mescla o configurado sobre o padrão e
+descarta o inválido — tecla fora da lista permitida, ação desconhecida e
+colisão (duas ações na mesma tecla: a segunda fica sem tecla, porque ação
+inalcançável é pior que tecla diferente da esperada).
+
+**Teclas aceitas** são só as de função e de controle (`F1`–`F12`, `Insert`,
+`Delete`, `Home`, `End`, `PageUp`, `PageDown`, `*`, `+`, `-`, `/`). Letra e
+número ficam de fora porque é o que o leitor de código de barras "digita" —
+viraria atalho a cada bipe. A lista está duplicada em
+`SettingsController.AllowedShortcutKeys` e em `shortcuts.js`; mexeu numa,
+mexa na outra.
+
+### Venda sem estoque
+
+Desligado por padrão. Ligado, o PDV deixa passar do saldo pedindo autorização
+de supervisor (mesmo fluxo do desconto). No servidor nada muda — o sync já
+aceitava saldo negativo por causa de vendas offline concorrentes —, mas a
+movimentação de estoque passa a registrar `SEM ESTOQUE` na nota quando o
+saldo fica abaixo de zero, e o dashboard tem o filtro **saldo negativo** em
+Produtos para o gerente regularizar na entrada da nota.
+
+> A autorização passa por `/api/auth/authorize`, que exige rede. Offline o
+> caixa não consegue liberar — mesma limitação do desconto acima da alçada.
+
+## 6. Impressão térmica
 
 `pdv/electron/print.cjs` monta HTML e imprime por `webContents.print()` numa
 janela oculta.
@@ -94,7 +128,7 @@ janela oculta.
 > montada ao contrário — o autoteste da própria impressora sai em branco
 > quando isso acontece. Vale conferir o hardware antes de mexer no código.
 
-## 6. Módulos plugáveis
+## 7. Módulos plugáveis
 
 | Módulo | Interface | Implementações |
 |---|---|---|
@@ -103,13 +137,13 @@ janela oculta.
 
 Trocar por configuração: `Billing:Provider` e `Fiscal:Provider`.
 
-## 7. Testes
+## 8. Testes
 
 ```powershell
 cd backend.Tests; dotnet test
 ```
 
-139 testes xUnit sobre provider InMemory — rodam sem Postgres. Transações
+146 testes xUnit sobre provider InMemory — rodam sem Postgres. Transações
 viram no-op (`TransactionIgnoredWarning` suprimido); o RLS real é coberto
 pelos scripts em `database/`.
 
@@ -117,7 +151,7 @@ Consequência a lembrar: `[Authorize(Roles=...)]` **não é aplicado** em teste
 unitário de controller. Onde a regra de papel importa, ela é repetida
 explicitamente no corpo do método (ex.: `Anonymize`).
 
-## 8. Comandos úteis
+## 9. Comandos úteis
 
 ```powershell
 # Backend
@@ -134,7 +168,7 @@ cd pdv; npm run rebuild                   # better-sqlite3 para a versão do Ele
 dotnet run --project tools/SqlRun -- "<conn>" database/20_algo.sql
 ```
 
-## 9. Segurança
+## 10. Segurança
 
 - TLS em todas as pontas.
 - O `TenantId` nunca aparece em URL nem header — só na claim assinada do JWT.

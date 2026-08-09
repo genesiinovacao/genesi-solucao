@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 import { auth, API_BASE } from '../lib/auth';
 import { cashSession } from '../lib/cashSession';
 import { printerPrefs } from '../lib/printerPrefs';
+import { resolveShortcuts, byKey, keyOf } from '../lib/shortcuts';
+import { moveFocus, arrowShouldNavigate, sectionOf } from '../lib/arrowNav';
 import OpenCashModal from '../components/OpenCashModal';
 import CloseCashModal from '../components/CloseCashModal';
 import CashMovementModal from '../components/CashMovementModal';
@@ -77,6 +79,9 @@ export default function PDV() {
   const [logo, setLogo] = useState(null);             // logo do cliente
   const [globalLogo, setGlobalLogo] = useState(null); // logo global do sistema
   const [storeName, setStoreName] = useState(null);
+  const [shortcutMap, setShortcutMap] = useState(() => resolveShortcuts(null));
+  const [customShortcuts, setCustomShortcuts] = useState(false);
+  const [allowNoStock, setAllowNoStock] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   // Orçamento reaberto no carrinho: viaja junto da venda para o servidor
@@ -91,6 +96,7 @@ export default function PDV() {
   const discountRef = useRef(null);
   const surchargeRef = useRef(null);
   const cartRef = useRef(null);
+  const screenRef = useRef(null);   // limite da navegação por setas
 
   // Posição do destaque. Item removido → cai no primeiro, nunca em índice morto.
   const selectedIndex = Math.max(0, cart.findIndex((i) => i.productId === selectedId));
@@ -112,6 +118,10 @@ export default function PDV() {
     // Limite de desconto definido pela loja (acima disso, pede supervisor)
     if (settings?.maxDiscountPercent != null) setMaxDiscount(Number(settings.maxDiscountPercent));
     setPromotions(settings?.promotions || []);
+    // Atalhos remapeados pelo admin — nulo cai no padrão do sistema
+    setShortcutMap(resolveShortcuts(settings?.pdvShortcuts));
+    setCustomShortcuts(Object.keys(settings?.pdvShortcuts || {}).length > 0);
+    setAllowNoStock(!!settings?.allowSaleWithoutStock);
   };
 
   // ---- Promoções cadastradas no dashboard ----
@@ -331,20 +341,37 @@ export default function PDV() {
       // Com modal aberto, quem manda são os atalhos dele
       if (anyModal) return;
 
-      switch (e.key) {
-        case 'F1':  e.preventDefault(); setShowShortcuts(true); return;
-        case 'F2':  e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); return;
-        case 'F3':  e.preventDefault(); setCustomerPickerOpen(true); return;
-        case 'F4':  e.preventDefault(); discountRef.current?.focus(); discountRef.current?.select(); return;
-        case 'F5':  e.preventDefault(); refreshCatalog(true); return;
-        case 'F6':  e.preventDefault(); if (currentSession) setShowCashMovement(true); return;
-        case 'F7':  e.preventDefault(); if (currentSession) setShowReturnSale(true); return;
-        case 'F8':  e.preventDefault(); surchargeRef.current?.focus(); surchargeRef.current?.select(); return;
-        case 'F9':  e.preventDefault(); requestCancelSale(); return;
-        case 'F10': e.preventDefault(); openPayment(); return;
-        case 'F11': e.preventDefault(); setShowQuote(true); return;
-        case 'F12': e.preventDefault(); if (currentSession) setShowCloseCash(true); return;
+      // Tecla → ação pelo mapa da loja, não por switch fixo: o admin remapeia
+      // no dashboard e o PDV obedece sem precisar de versão nova.
+      switch (byKey(shortcutMap)[e.key]) {
+        case 'help':      e.preventDefault(); setShowShortcuts(true); return;
+        case 'search':    e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); return;
+        case 'customer':  e.preventDefault(); setCustomerPickerOpen(true); return;
+        case 'discount':  e.preventDefault(); discountRef.current?.focus(); discountRef.current?.select(); return;
+        case 'refresh':   e.preventDefault(); refreshCatalog(true); return;
+        case 'cash':      e.preventDefault(); if (currentSession) setShowCashMovement(true); return;
+        case 'return':    e.preventDefault(); if (currentSession) setShowReturnSale(true); return;
+        case 'surcharge': e.preventDefault(); surchargeRef.current?.focus(); surchargeRef.current?.select(); return;
+        case 'cancel':    e.preventDefault(); requestCancelSale(); return;
+        case 'payment':   e.preventDefault(); openPayment(); return;
+        case 'quote':     e.preventDefault(); setShowQuote(true); return;
+        case 'closeCash': e.preventDefault(); if (currentSession) setShowCloseCash(true); return;
         default: break;
+      }
+
+      // ← → andam entre os campos como Tab / Shift+Tab. Dentro de um texto a
+      // seta só navega quando o cursor já está na ponta — no meio da palavra
+      // ela continua sendo do texto.
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const dir = e.key === 'ArrowRight' ? 1 : -1;
+        // Fora de uma seção marcada a seta não é nossa — a grade de produtos
+        // tem dezenas de botões e atravessá-los não ajudaria ninguém.
+        const section = sectionOf(e.target);
+        if (section && arrowShouldNavigate(e.target, dir)) {
+          e.preventDefault();
+          moveFocus(section, dir);
+        }
+        return;
       }
 
       // Navegação do carrinho funciona mesmo com o foco na busca: o campo é
@@ -378,9 +405,9 @@ export default function PDV() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line
-  }, [cart, selectedIndex, currentSession, showOpenCash, showCloseCash, showPayment,
-      showCashMovement, showReturnSale, showPrinterSettings, lastSale, operatorModal,
-      customerPickerOpen, showShortcuts, showQuote]);
+  }, [cart, selectedIndex, currentSession, shortcutMap, showOpenCash, showCloseCash,
+      showPayment, showCashMovement, showReturnSale, showPrinterSettings, lastSale,
+      operatorModal, customerPickerOpen, showShortcuts, showQuote]);
 
   // Mantém o item destacado visível quando a lista passa da altura do painel
   useEffect(() => {
@@ -490,15 +517,50 @@ export default function PDV() {
     return { ...item, quantity, discountAmount: discount, totalPrice: gross - discount };
   };
 
-  const addToCart = (p, qty = 1) => {
-    if (p.stock_quantity <= 0) return showToast(`${p.name} está sem estoque.`, 'error');
+  /**
+   * Vender sem saldo. A loja liga isso no dashboard e cada ocorrência passa
+   * por gerente: a mercadoria está na prateleira e a nota de entrada chega
+   * depois, mas o estoque fica negativo até alguém regularizar — não é o
+   * caminho normal, é a exceção autorizada.
+   */
+  const authorizeNoStock = (p, faltando, onOk) => {
+    if (!allowNoStock) {
+      showToast(
+        `${p.name} está sem estoque. O administrador pode liberar a venda sem saldo em Configurações.`,
+        'error', 6000,
+      );
+      return;
+    }
+    setOperatorModal({
+      mode: 'authorize',
+      action: `venda de ${faltando} ${p.unit || 'un'} de "${p.name}" sem estoque (saldo ${p.stock_quantity})`,
+      value: faltando,
+      onDone: (result) => {
+        setOperatorModal(null);
+        onOk();
+        showToast(
+          `Venda sem estoque autorizada por ${result.supervisorName}. Regularize na entrada da nota.`,
+          'success', 6000,
+        );
+      },
+    });
+  };
+
+  const addToCart = (p, qty = 1, force = false) => {
+    const emCarrinho = cart.find((i) => i.productId === p.id)?.quantity || 0;
+    const excede = emCarrinho + qty > p.stock_quantity;
+
+    if (excede && !force) {
+      authorizeNoStock(p, emCarrinho + qty - Math.max(0, p.stock_quantity),
+        () => addToCart(p, qty, true));
+      return;
+    }
+
     setCart((prev) => {
       const found = prev.find((i) => i.productId === p.id);
       if (found) {
-        if (found.quantity + qty > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
         return prev.map((i) => i.productId === p.id ? withQuantity(i, i.quantity + qty) : i);
       }
-      if (qty > p.stock_quantity) { showToast(`Estoque insuficiente: ${p.name}.`, 'error'); return prev; }
       const promo = promoFor(p, selectedCustomer);
       const pct = promo?.discountPercent || 0;
       const gross = p.sale_price * qty;
@@ -519,15 +581,22 @@ export default function PDV() {
     searchRef.current?.focus();
   };
 
-  const updateQty = (productId, delta) => setCart((prev) =>
-    prev.flatMap((i) => {
-      if (i.productId !== productId) return [i];
-      const q = i.quantity + delta;
-      if (q <= 0) return [];
-      if (q > i.stockAvailable) { showToast(`Estoque máximo: ${i.stockAvailable}`, 'error'); return [i]; }
-      return [withQuantity(i, q)];
-    })
-  );
+  const updateQty = (productId, delta, force = false) => {
+    const item = cart.find((i) => i.productId === productId);
+    if (!item) return;
+    const q = item.quantity + delta;
+    if (q <= 0) { removeItem(productId); return; }
+
+    if (q > item.stockAvailable && !force) {
+      const p = products.find((x) => x.id === productId);
+      if (p) authorizeNoStock(p, q - Math.max(0, item.stockAvailable),
+        () => updateQty(productId, delta, true));
+      else showToast(`Estoque máximo: ${item.stockAvailable}`, 'error');
+      return;
+    }
+
+    setCart((prev) => prev.map((i) => i.productId === productId ? withQuantity(i, q) : i));
+  };
 
   const removeItem = (id) => setCart((prev) => prev.filter((i) => i.productId !== id));
   const clearCart = () => {
@@ -610,7 +679,7 @@ export default function PDV() {
       return;
     }
     cancelArmRef.current = Date.now();
-    showToast('Pressione F9 de novo para cancelar a venda.', 'error', 4000);
+    showToast(`Pressione ${keyOf(shortcutMap, 'cancel') || 'o mesmo atalho'} de novo para cancelar a venda.`, 'error', 4000);
   };
 
   // ---- Payment flow ----
@@ -692,80 +761,88 @@ export default function PDV() {
 
   return (
     <>
-    <div className="bg-slate-950 text-slate-100 no-print"
+    <div ref={screenRef} className="bg-slate-950 text-slate-100 no-print"
          style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
+      {/* Marca d'água da Genesi no canto inferior esquerdo */}
+      {globalLogo && <img src={globalLogo} alt="" aria-hidden="true" className="pdv-watermark" />}
       {/* ===== LEFT: products. Padding-right reserva espaço pro aside fixed à direita ===== */}
       <div className="grid"
            style={{
              position: 'absolute', top: 0, left: 0, bottom: 0, right: 440,
              gridTemplateRows: 'auto auto minmax(0, 1fr)'
            }}>
-        <header className="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-900/50">
-          <div className="flex items-center gap-3">
+        {/* Header alto: no balcão a tela é vista de pé e de longe, então
+            nome da loja, estado da conexão e ações ficam maiores. Todo ícone
+            de ação usa a mesma caixa .pdv-icon-btn — antes cada um tinha um
+            tamanho e a fileira parecia desalinhada. */}
+        <header className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+          <div className="flex items-center gap-4 min-w-0">
             {logo
               ? <img src={logo} alt={storeName || 'Logo da loja'}
-                     className="w-12 h-12 object-contain rounded-lg bg-white/95 p-1" />
-              : <div className="bg-blue-600 w-12 h-12 rounded-lg flex items-center justify-center text-2xl">🛒</div>}
-            <div>
-              <h1 className="text-lg font-bold">
+                     className="w-16 h-16 object-contain rounded-xl bg-white/95 p-1.5 flex-shrink-0" />
+              : <div className="bg-blue-600 w-16 h-16 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">🛒</div>}
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold leading-tight truncate">
                 {storeName || user?.tenantName || <>SOLUÇÃO <span className="text-blue-400">2026</span></>}
               </h1>
-              <p className="text-xs text-slate-400">{storeName ? 'SOLUÇÃO 2026 · PDV' : user?.tenantName}</p>
+              <p className="text-sm text-slate-400 truncate">
+                {storeName ? 'SOLUÇÃO 2026 · PDV' : user?.tenantName}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+
+          <div data-nav-section="header" className="flex items-center gap-2.5 flex-shrink-0">
             {currentSession && (
               <>
-                <button onClick={() => setShowCashMovement(true)}
-                        className="px-3 py-1.5 bg-amber-900/40 text-amber-300 rounded-full text-xs hover:bg-amber-900/60">
-                  💵 Sangria/Suprimento <kbd className="opacity-60">F6</kbd>
+                <button onClick={() => setShowCashMovement(true)} className="pdv-chip pdv-chip-amber">
+                  💵 Sangria <kbd>{keyOf(shortcutMap, 'cash') || '—'}</kbd>
                 </button>
-                <button onClick={() => setShowReturnSale(true)}
-                        className="px-3 py-1.5 bg-rose-900/40 text-rose-300 rounded-full text-xs hover:bg-rose-900/60">
-                  ↩️ Devolução <kbd className="opacity-60">F7</kbd>
+                <button onClick={() => setShowReturnSale(true)} className="pdv-chip pdv-chip-rose">
+                  ↩️ Devolução <kbd>{keyOf(shortcutMap, 'return') || '—'}</kbd>
                 </button>
-                <button onClick={() => setShowCloseCash(true)} className="px-3 py-1.5 bg-emerald-900/40 text-emerald-300 rounded-full text-xs hover:bg-emerald-900/60">
-                  💰 Caixa aberto · Fechar <kbd className="opacity-60">F12</kbd>
+                <button onClick={() => setShowCloseCash(true)} className="pdv-chip pdv-chip-emerald">
+                  💰 Fechar caixa <kbd>{keyOf(shortcutMap, 'closeCash') || '—'}</kbd>
                 </button>
               </>
             )}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${isOnline ? 'bg-emerald-900/40 text-emerald-300' : 'bg-rose-900/40 text-rose-300'}`}>
+
+            <div className={`pdv-chip ${isOnline ? 'pdv-chip-emerald' : 'pdv-chip-rose'}`}>
               <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 pulse-online' : 'bg-rose-400'}`} />
-              {isOnline ? 'Cloud Online' : 'Modo Offline'}
+              {isOnline ? 'Online' : 'Offline'}
             </div>
+
             {pendingCount > 0 && (
-              <span className="px-3 py-1.5 rounded-full bg-amber-900/40 text-amber-300 text-xs">
-                ⏳ {pendingCount} venda(s) na fila
-              </span>
+              <span className="pdv-chip pdv-chip-amber">⏳ {pendingCount} na fila</span>
             )}
             {syncStatus === 'syncing' && <span className="text-slate-400 text-xs">Sincronizando…</span>}
             {syncStatus === 'error' && (
               <button onClick={doSync} title={syncError || 'Erro ao sincronizar'}
-                      className="px-3 py-1.5 rounded-full bg-rose-900/40 text-rose-300 text-xs hover:bg-rose-900/60">
-                ⚠️ Sync falhou · Tentar agora
+                      className="pdv-chip pdv-chip-rose">⚠️ Sync falhou</button>
+            )}
+
+            <div className="flex items-center gap-1 pl-1 border-l border-slate-800">
+              <button onClick={() => refreshCatalog(true)} disabled={refreshing}
+                      title={`Atualizar catálogo — ${keyOf(shortcutMap, 'refresh') || 'sem tecla'}`}
+                      className={`pdv-icon-btn ${refreshing ? 'animate-spin' : ''}`}>🔄</button>
+              <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
+                      className="pdv-icon-btn">🖨️</button>
+              <button onClick={() => setShowShortcuts(true)}
+                      title={`Atalhos do teclado — ${keyOf(shortcutMap, 'help') || 'sem tecla'}`}
+                      className="pdv-icon-btn">⌨️</button>
+              <button onClick={openOperatorSwitch} title="Trocar operador do caixa (troca de turno)"
+                      className="pdv-icon-btn pdv-icon-btn-wide">
+                <span className="text-base">👤</span>
+                <span className="text-sm max-w-[7rem] truncate">{currentUser?.name}</span>
+                <span className="text-slate-500 text-xs">⇄</span>
               </button>
-            )}
-            <button onClick={() => refreshCatalog(true)} disabled={refreshing}
-                    title="Atualizar catálogo agora — F5 (produtos e estoque do dashboard)"
-                    className={`text-slate-400 hover:text-white text-sm px-2 ${refreshing ? 'animate-spin' : ''}`}>🔄</button>
-            <button onClick={() => setShowPrinterSettings(true)} title="Configurar impressora térmica"
-                    className="text-slate-400 hover:text-white text-sm px-2">🖨️</button>
-            <button onClick={() => setShowShortcuts(true)} title="Atalhos do teclado — F1"
-                    className="text-slate-400 hover:text-white text-sm px-2">⌨️</button>
-            {globalLogo && (
-              <img src={globalLogo} alt="SOLUÇÃO" title="SOLUÇÃO 2026"
-                   className="h-8 object-contain rounded bg-white/95 p-0.5" />
-            )}
-            <button onClick={openOperatorSwitch} title="Trocar operador do caixa (troca de turno)"
-                    className="text-slate-300 hover:text-white text-sm px-2 py-1 rounded-lg hover:bg-slate-800">
-              👤 {currentUser?.name} <span className="text-slate-500 text-xs">⇄</span>
-            </button>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm">🚪 Sair</button>
+              <button onClick={handleLogout} title="Sair do PDV" className="pdv-icon-btn">🚪</button>
+            </div>
           </div>
         </header>
 
-        <div className="p-4 flex gap-3 border-b border-slate-800 bg-slate-900/30">
-          <input ref={searchRef} type="text" placeholder="🔍 Escaneie ou digite (F2) · 12*código para quantidade"
+        <div data-nav-section="busca"
+             className="p-4 flex gap-3 border-b border-slate-800 bg-slate-900/30">
+          <input ref={searchRef} type="text" placeholder={`🔍 Escaneie ou digite (${keyOf(shortcutMap, 'search') || '—'}) · 12*código para quantidade`}
                  value={search} onChange={(e) => setSearch(e.target.value)}
                  onKeyDown={(e) => {
                    if (e.key === 'Enter') {
@@ -790,7 +867,10 @@ export default function PDV() {
           ) : (
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {filteredProducts.map((p) => (
-                <button key={p.id} onClick={() => addToCart(p)} disabled={p.stock_quantity <= 0}
+                <button key={p.id} onClick={() => addToCart(p)}
+                        disabled={p.stock_quantity <= 0 && !allowNoStock}
+                        title={p.stock_quantity <= 0 && allowNoStock
+                          ? 'Sem estoque — a venda pede autorização do gerente' : undefined}
                         className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-4 text-left border border-transparent hover:border-blue-500 transition-all">
                   <div className="flex items-start justify-between">
                     <div className="text-3xl mb-2">{p.emoji}</div>
@@ -834,7 +914,7 @@ export default function PDV() {
           </h2>
           <button onClick={() => setCustomerPickerOpen(true)} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg">
             {selectedCustomer ? `👤 ${selectedCustomer.name.split(' ')[0]}` : '👤 Cliente'}
-            <kbd className="ml-1.5 opacity-60">F3</kbd>
+            <kbd className="ml-1.5 opacity-60">{keyOf(shortcutMap, 'customer') || '—'}</kbd>
           </button>
         </div>
 
@@ -844,7 +924,7 @@ export default function PDV() {
               <div className="text-5xl mb-3 opacity-40">🛒</div>
               <p className="text-sm">Carrinho vazio.</p>
               <p className="text-xs mt-1 text-slate-600">Escaneie o produto ou digite o nome.</p>
-              <p className="text-[11px] mt-3 text-slate-600">F1 mostra todos os atalhos</p>
+              <p className="text-[11px] mt-3 text-slate-600">{keyOf(shortcutMap, 'help') || 'O botão ⌨️'} mostra todos os atalhos</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -879,7 +959,8 @@ export default function PDV() {
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/30">
+        <div data-nav-section="totais"
+             className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/30">
           <div className="flex justify-between text-sm text-slate-400">
             <span>Subtotal</span>
             <span>{brl(subtotal)}</span>
@@ -898,7 +979,7 @@ export default function PDV() {
           )}
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400">
-              Desconto (%) <kbd className="opacity-50 text-xs">F4</kbd>
+              Desconto (%) <kbd className="opacity-50 text-xs">{keyOf(shortcutMap, 'discount') || '—'}</kbd>
               {maxDiscount === 0 && <span className="text-amber-500 text-xs ml-1" title="Todo desconto exige gerente">🔒</span>}
             </label>
             <input ref={discountRef} type="number" min="0" max="100" step="0.5" value={discountPct}
@@ -914,7 +995,7 @@ export default function PDV() {
           )}
           <div className="flex justify-between items-center text-sm">
             <label className="text-slate-400" title="Entrega, taxa de serviço ou juros repassados">
-              Acréscimo (R$) <kbd className="opacity-50 text-xs">F8</kbd>
+              Acréscimo (R$) <kbd className="opacity-50 text-xs">{keyOf(shortcutMap, 'surcharge') || '—'}</kbd>
             </label>
             <input ref={surchargeRef} type="number" min="0" step="0.5" value={surcharge}
                    onChange={(e) => setSurcharge(e.target.value)}
@@ -935,16 +1016,16 @@ export default function PDV() {
 
           <button onClick={openPayment} disabled={cart.length === 0}
                   className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold py-4 rounded-xl text-lg shadow-lg shadow-emerald-900/30">
-            💳 Pagamento · F10
+            💳 Pagamento <kbd className="opacity-70">{keyOf(shortcutMap, 'payment') || '—'}</kbd>
           </button>
           <button onClick={() => setShowQuote(true)}
                   title="Gerar orçamento para o cliente levar, ou reabrir um orçamento salvo"
                   className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 rounded-lg text-sm">
-            📄 Orçamento · F11
+            📄 Orçamento <kbd className="opacity-70">{keyOf(shortcutMap, 'quote') || '—'}</kbd>
           </button>
           {cart.length > 0 && (
             <button onClick={requestCancelSale} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">
-              Cancelar venda · F9
+              Cancelar venda · {keyOf(shortcutMap, 'cancel') || 'sem tecla'}
             </button>
           )}
         </div>
@@ -1001,7 +1082,10 @@ export default function PDV() {
         <PrinterSettingsModal onClose={() => setShowPrinterSettings(false)} />
       )}
 
-      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showShortcuts && (
+        <ShortcutsModal shortcutMap={shortcutMap} customized={customShortcuts}
+                        onClose={() => setShowShortcuts(false)} />
+      )}
 
       {showQuote && (
         <QuoteModal

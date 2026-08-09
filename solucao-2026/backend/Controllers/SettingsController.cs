@@ -31,6 +31,17 @@ public class SettingsController : ControllerBase
         expiresAt is { } exp &&
         Services.Billing.SubscriptionCycle.Today() >= exp.AddDays(_config.GetValue("Billing:GraceDays", 3) + 1);
 
+    /// <summary>
+    /// Teclas que o PDV aceita como atalho. Restrito de propósito: teclas de
+    /// função e alguns controles não colidem com o que o operador digita nem
+    /// com o leitor de código de barras, que "digita" letras e números.
+    /// </summary>
+    private static readonly HashSet<string> AllowedShortcutKeys = new()
+    {
+        "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+        "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "*", "+", "-", "/",
+    };
+
     // The "tenants" table has no RLS (it's the control plane), so we
     // filter explicitly by the authenticated tenant_id every time.
 
@@ -48,7 +59,26 @@ public class SettingsController : ControllerBase
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
-            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus,
+            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock));
+    }
+
+    /// <summary>
+    /// JSON malformado na coluna não pode derrubar as configurações inteiras:
+    /// cai no padrão do sistema, que é exatamente o que o nulo significa.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string>? ParseShortcuts(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer
+                .Deserialize<Dictionary<string, string>>(json);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     [HttpPut]
@@ -74,6 +104,32 @@ public class SettingsController : ControllerBase
         t.LogoEmoji = req.LogoEmoji;
         t.LogoBase64 = req.LogoBase64;
 
+        // Nulo mantém o que está salvo (a tela de dados cadastrais não mexe
+        // em atalho); dicionário vazio é o pedido explícito de voltar ao padrão.
+        if (req.PdvShortcuts is { } keys)
+        {
+            var invalid = keys.Where(k => !AllowedShortcutKeys.Contains(k.Value)).ToList();
+            if (invalid.Count > 0)
+                return BadRequest(new
+                {
+                    error = $"Tecla não suportada: {string.Join(", ", invalid.Select(i => i.Value))}.",
+                });
+
+            // Duas ações na mesma tecla deixariam uma delas inalcançável
+            var duplicated = keys.GroupBy(k => k.Value).FirstOrDefault(g => g.Count() > 1);
+            if (duplicated is not null)
+                return BadRequest(new
+                {
+                    error = $"A tecla {duplicated.Key} está em mais de uma ação.",
+                });
+
+            t.PdvShortcuts = keys.Count == 0
+                ? null
+                : System.Text.Json.JsonSerializer.Serialize(keys);
+        }
+
+        if (req.AllowSaleWithoutStock is { } allow) t.AllowSaleWithoutStock = allow;
+
         await _db.SaveChangesAsync(ct);
 
         var globalLogo = await _db.PlatformSettings.AsNoTracking()
@@ -82,6 +138,7 @@ public class SettingsController : ControllerBase
         return Ok(new TenantSettingsDto(
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
-            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus));
+            t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus,
+            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock));
     }
 }

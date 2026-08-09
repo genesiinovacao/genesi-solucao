@@ -20,6 +20,16 @@ public class Tenant
     public string? LogoEmoji { get; set; }
     public string? LogoBase64 { get; set; }
     public string Segment { get; set; } = "supermercado";
+    /// <summary>
+    /// Mapa JSON ação → tecla para o PDV. Nulo = padrão do sistema. Existe
+    /// para a loja que migra de outro sistema manter a musculatura do caixa.
+    /// </summary>
+    public string? PdvShortcuts { get; set; }
+    /// <summary>
+    /// Permite vender item sem saldo, com aval de gerente. Desligado por
+    /// padrão: quem liga assume conviver com estoque negativo até a entrada.
+    /// </summary>
+    public bool AllowSaleWithoutStock { get; set; }
     /// <summary>Rede a que esta loja pertence (nulo = loja única).</summary>
     public Guid? GroupId { get; set; }
     public int MaxPosTerminals { get; set; } = 1;

@@ -17,6 +17,61 @@ input, textarea {
   user-select: text;
 }
 
+/* Ações do header: uma caixa só para todo ícone, e uma pílula só para todo
+   indicador. Antes cada botão tinha o seu tamanho e a fileira ficava torta. */
+.pdv-icon-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  border-radius: 0.6rem;
+  color: #cbd5e1;
+  background: transparent;
+  transition: background-color 120ms, color 120ms;
+}
+.pdv-icon-btn:hover:not(:disabled) { background: #1e293b; color: #fff; }
+.pdv-icon-btn:disabled { opacity: 0.45; }
+/* Único que foge do quadrado: leva o nome do operador junto */
+.pdv-icon-btn-wide { width: auto; padding: 0 0.7rem; }
+
+.pdv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.5rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.pdv-chip kbd { font-size: 0.66rem; opacity: 0.65; }
+.pdv-chip-amber   { background: rgba(120, 53, 15, 0.4);  color: #fcd34d; }
+.pdv-chip-amber:hover   { background: rgba(120, 53, 15, 0.6); }
+.pdv-chip-rose    { background: rgba(136, 19, 55, 0.4);  color: #fda4af; }
+.pdv-chip-rose:hover    { background: rgba(136, 19, 55, 0.6); }
+.pdv-chip-emerald { background: rgba(6, 78, 59, 0.4);    color: #6ee7b7; }
+.pdv-chip-emerald:hover { background: rgba(6, 78, 59, 0.6); }
+
+/* Marca d'água da Genesi: presente sem disputar atenção com a venda.
+   pointer-events none para nunca engolir um clique no catálogo. */
+.pdv-watermark {
+  position: fixed;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 5;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.14;
+  max-height: 4.5rem;
+  max-width: 11rem;
+  object-fit: contain;
+  filter: grayscale(1) brightness(2.2);
+}
+
 /* Dica de atalho ao lado de cada ação. O caixa opera sem mouse: a tecla
    precisa estar visível junto do botão, não só na tela de ajuda (F1). */
 kbd {

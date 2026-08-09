@@ -29,6 +29,8 @@ public class ProductsController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? category = null,
         [FromQuery] bool? lowStockOnly = null,
+        /// <summary>Só saldo negativo — a fila de regularização da entrada de nota.</summary>
+        [FromQuery] bool? negativeStockOnly = null,
         CancellationToken ct = default)
     {
         page = Math.Max(page, 1);
@@ -49,6 +51,9 @@ public class ProductsController : ControllerBase
 
         if (lowStockOnly == true)
             q = q.Where(p => p.StockQuantity <= p.MinStock);
+
+        if (negativeStockOnly == true)
+            q = q.Where(p => p.StockQuantity < 0);
 
         var total = await q.CountAsync(ct);
 

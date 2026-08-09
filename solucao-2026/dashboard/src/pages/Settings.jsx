@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { formatDoc } from '../lib/masks';
+import PdvShortcutsEditor from '../components/PdvShortcutsEditor';
 
 const regimes = [
   { v: 'simples_nacional', l: 'Simples Nacional' },
@@ -44,6 +45,9 @@ export default function Settings() {
         taxRegime: data.taxRegime,
         logoEmoji: data.logoEmoji || null,
         logoBase64: data.logoBase64 || null,
+        // Objeto vazio é o pedido explícito de voltar ao padrão; nulo mantém
+        pdvShortcuts: data.pdvShortcuts ?? {},
+        allowSaleWithoutStock: !!data.allowSaleWithoutStock,
       };
       const { data: res } = await api.put('/api/settings', payload);
       setData(res);
@@ -172,6 +176,43 @@ export default function Settings() {
             <label className="block text-xs font-semibold text-slate-700 mb-1">Endereço</label>
             <input type="text" value={data.address || ''} onChange={(e) => setData({ ...data, address: e.target.value })}
                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+        </section>
+
+        <section className="p-6 space-y-5">
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">🖥️ Ponto de venda</h2>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={!!data.allowSaleWithoutStock}
+                   onChange={(e) => setData({ ...data, allowSaleWithoutStock: e.target.checked })}
+                   className="mt-0.5 w-4 h-4 accent-blue-600" />
+            <div>
+              <div className="text-sm font-medium text-slate-800">
+                Permitir vender item sem estoque (com autorização de gerente)
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
+                Para quando a mercadoria já está na prateleira e a nota de entrada
+                só chega depois. Cada venda pede código e PIN de gerente, e o saldo
+                fica <strong>negativo</strong> até você dar entrada na nota.
+              </p>
+              {data.allowSaleWithoutStock && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2 max-w-xl">
+                  Enquanto estiver ligado, o estoque deixa de ser trava e passa a ser
+                  indicador. Acompanhe em <strong>Produtos → saldo negativo</strong> para
+                  não acumular divergência — e lembre que vender sem entrada registrada
+                  também desencontra a escrituração fiscal.
+                </p>
+              )}
+            </div>
+          </label>
+
+          <div className="pt-2 border-t border-slate-100">
+            <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-3">
+              Teclas de atalho
+            </h3>
+            <PdvShortcutsEditor
+              value={data.pdvShortcuts}
+              onChange={(next) => setData({ ...data, pdvShortcuts: next })} />
           </div>
         </section>
 

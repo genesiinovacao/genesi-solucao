@@ -338,6 +338,8 @@ export default function Products() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  // Fila de regularizacao: o que o PDV vendeu sem saldo aguardando entrada de nota
+  const [negativeOnly, setNegativeOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null); // null | 'new' | produto
   const [adjusting, setAdjusting] = useState(null); // produto do ajuste de estoque
@@ -370,6 +372,7 @@ export default function Products() {
           pageSize: 20,
           search: search || undefined,
           lowStockOnly: lowStockOnly || undefined,
+          negativeStockOnly: negativeOnly || undefined,
         },
       });
       setData(res);
@@ -383,7 +386,7 @@ export default function Products() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, lowStockOnly]);
+  }, [page, lowStockOnly, negativeOnly]);
 
   const onSearch = (e) => {
     e.preventDefault();
@@ -438,6 +441,16 @@ export default function Products() {
               className="accent-blue-600"
             />
             Só estoque baixo
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
+                 title="Vendidos sem saldo — aguardando entrada de nota para regularizar">
+            <input
+              type="checkbox"
+              checked={negativeOnly}
+              onChange={(e) => { setPage(1); setNegativeOnly(e.target.checked); }}
+              className="accent-red-600"
+            />
+            Só saldo negativo
           </label>
           <div className="text-sm text-slate-500 ml-auto">
             <span className="font-semibold text-slate-800">{data.totalCount}</span> produto(s)

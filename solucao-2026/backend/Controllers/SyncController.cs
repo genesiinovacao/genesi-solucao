@@ -156,7 +156,22 @@ public class SyncController : ControllerBase
                     if (item.ProductId is not { } pid || !products.TryGetValue(pid, out var product))
                         continue;
 
+                    var before = product.StockQuantity;
                     product.StockQuantity -= item.Quantity;
+
+                    // Saldo abaixo de zero é a marca de venda sem estoque —
+                    // seja por venda offline concorrente, seja pelo caixa que
+                    // vendeu com aval de gerente. Fica anotado na própria
+                    // movimentação para o gerente regularizar na entrada da nota.
+                    var semEstoque = product.StockQuantity < 0;
+                    var nota = $"Venda sincronizada do PDV ({dto.PosTerminalId ?? "?"})";
+                    if (semEstoque)
+                    {
+                        nota += $" — SEM ESTOQUE: saldo {before} antes, {product.StockQuantity} depois";
+                        _log.LogWarning(
+                            "Venda sem estoque: {Produto} ficou em {Saldo} (tenant {Tenant})",
+                            product.Name, product.StockQuantity, tenantId);
+                    }
 
                     _db.StockMovements.Add(new StockMovement
                     {
@@ -169,7 +184,7 @@ public class SyncController : ControllerBase
                         UnitCost = product.CostPrice,
                         ReferenceType = "sale",
                         ReferenceId = sale.Id,
-                        Notes = $"Venda sincronizada do PDV ({dto.PosTerminalId ?? "?"})",
+                        Notes = nota,
                         CreatedAt = DateTime.UtcNow,
                     });
                 }

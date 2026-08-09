@@ -239,7 +239,15 @@ do PDV; o resumo:
 
 `↑ ↓` escolhe o item do carrinho; `+` `−` mudam a quantidade e `Delete`
 remove — **só com a busca vazia**, para não roubar as teclas de quem digita.
-`12*código` lança 12 unidades de uma vez.
+`12*código` lança 12 unidades de uma vez. `← →` andam entre os campos da
+seção como Tab / Shift+Tab (dentro de um texto, só quando o cursor já está
+na ponta).
+
+**As teclas são configuráveis.** Em *Configurações → Ponto de venda* o admin
+remapeia cada ação — existe para a loja que migra de outro sistema manter a
+musculatura do caixa. A tabela acima é o padrão de fábrica; o `F1` do PDV
+sempre mostra o mapa em vigor. Só teclas de função e de controle são aceitas:
+letra e número é o que o leitor de código de barras "digita".
 
 > O app empacotado roda **sem menu do Electron** (`Menu.setApplicationMenu(null)`):
 > os aceleradores do menu (F11 tela cheia, F12, Ctrl+R) roubavam teclas do
