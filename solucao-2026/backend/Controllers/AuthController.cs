@@ -59,7 +59,25 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = "Credenciais inválidas." });
         }
 
-        if (!BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
+        // Hash corrompido no banco (gravado truncado, com a senha em texto
+        // puro no lugar do hash, ou por edição manual) fazia o BCrypt lançar
+        // e o login devolver 500 sem corpo — a tela então dizia "verifique o
+        // backend", mandando procurar defeito no lugar errado. Credencial que
+        // não confere é 401, seja qual for o motivo; o log diz o que houve.
+        bool senhaConfere;
+        try
+        {
+            senhaConfere = BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex,
+                "Hash de senha inválido no banco para {Email} (tamanho {Len}) — "
+                + "redefina a senha deste usuário", req.Email, user.PasswordHash?.Length ?? 0);
+            return Unauthorized(new { error = "Credenciais inválidas." });
+        }
+
+        if (!senhaConfere)
         {
             _log.LogInformation("Login failed (wrong password) for {Email}", req.Email);
             return Unauthorized(new { error = "Credenciais inválidas." });
