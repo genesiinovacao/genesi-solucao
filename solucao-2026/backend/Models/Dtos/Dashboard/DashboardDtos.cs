@@ -11,7 +11,14 @@ public record DashboardSummaryDto(
     int ActiveDeliveries,
     IReadOnlyList<DailySalesPointDto> SalesLast7Days,
     IReadOnlyList<CategorySalesDto> SalesByCategory,
-    IReadOnlyList<LowStockProductDto> LowStockProducts);
+    IReadOnlyList<LowStockProductDto> LowStockProducts,
+    /// <summary>
+    /// Produtos com saldo abaixo de zero — vendidos sem estoque, esperando
+    /// entrada de nota. Fica no resumo porque divergência esquecida vira
+    /// inventário errado, e ninguém abre a tela de produtos para conferir.
+    /// </summary>
+    int NegativeStockCount = 0,
+    IReadOnlyList<LowStockProductDto>? NegativeStockProducts = null);
 
 public record DailySalesPointDto(DateOnly Date, decimal Total, int Count);
 public record CategorySalesDto(string Category, decimal Total);

@@ -135,6 +135,35 @@ public class PdvConfigTests
     }
 
     /// <summary>
+    /// Divergência esquecida vira inventário errado. O resumo tem de contar
+    /// quantos itens ficaram devendo entrada de nota, senão ninguém olha.
+    /// </summary>
+    [Fact]
+    public async Task Dashboard_CountsProductsWaitingForStockEntry()
+    {
+        var db = TestDb.Create();
+        var ctx = new TenantContext();
+        ctx.SetContext(TenantId, Guid.NewGuid(), "admin");
+
+        db.Products.AddRange(
+            new Product { Id = Guid.NewGuid(), TenantId = TenantId, Name = "Pastilha", StockQuantity = -3m, IsActive = true },
+            new Product { Id = Guid.NewGuid(), TenantId = TenantId, Name = "Óleo", StockQuantity = -1m, IsActive = true },
+            new Product { Id = Guid.NewGuid(), TenantId = TenantId, Name = "Filtro", StockQuantity = 0m, IsActive = true },
+            new Product { Id = Guid.NewGuid(), TenantId = TenantId, Name = "Correia", StockQuantity = 12m, IsActive = true });
+        await db.SaveChangesAsync();
+
+        var response = await new DashboardController(db).Summary(default);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var dto = (Models.Dtos.Dashboard.DashboardSummaryDto)ok.Value!;
+        // Zerado não conta: sem saldo é diferente de dever entrada
+        Assert.Equal(2, dto.NegativeStockCount);
+        Assert.Equal(2, dto.NegativeStockProducts!.Count);
+        // O pior primeiro, que é por onde o gerente começa
+        Assert.Equal("Pastilha", dto.NegativeStockProducts![0].Name);
+    }
+
+    /// <summary>
     /// JSON quebrado na coluna (edição manual, migração torta) não pode
     /// derrubar a tela de configurações inteira — cai no padrão.
     /// </summary>

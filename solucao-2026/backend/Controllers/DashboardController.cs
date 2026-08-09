@@ -102,6 +102,17 @@ public class DashboardController : ControllerBase
         var lowStockCount = await _db.Products.AsNoTracking()
             .CountAsync(p => p.IsActive && p.StockQuantity <= p.MinStock, ct);
 
+        // Saldo negativo: vendido sem estoque, esperando entrada de nota
+        var negativeStock = await _db.Products.AsNoTracking()
+            .Where(p => p.IsActive && p.StockQuantity < 0)
+            .OrderBy(p => p.StockQuantity)
+            .Take(10)
+            .Select(p => new LowStockProductDto(p.Id, p.Name, p.StockQuantity, p.MinStock, p.Emoji))
+            .ToListAsync(ct);
+
+        var negativeStockCount = await _db.Products.AsNoTracking()
+            .CountAsync(p => p.IsActive && p.StockQuantity < 0, ct);
+
         var customerCount = await _db.Customers.AsNoTracking()
             .CountAsync(c => c.Status == "active", ct);
 
@@ -112,6 +123,7 @@ public class DashboardController : ControllerBase
             salesToday, salesCountToday, averageTicket,
             salesYesterday, changePercent,
             lowStockCount, customerCount, activeDeliveries,
-            sales7Days, byCategory, lowStock));
+            sales7Days, byCategory, lowStock,
+            negativeStockCount, negativeStock));
     }
 }

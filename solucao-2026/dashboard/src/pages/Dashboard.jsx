@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Title, Text, AreaChart, DonutChart, BadgeDelta, Metric } from '@tremor/react';
 import { api } from '../lib/api';
 
@@ -47,6 +48,39 @@ export default function Dashboard() {
           {data.salesChangePercent > 0 ? '+' : ''}{data.salesChangePercent.toFixed(1)}% vs. ontem
         </BadgeDelta>
       </div>
+
+      {/* Saldo negativo é dívida de entrada de nota: fica no alto porque
+          divergência esquecida vira inventário errado, e ninguém abre a tela
+          de produtos para conferir por conta própria. */}
+      {data.negativeStockCount > 0 && (
+        <div className="mb-8 rounded-xl border border-red-300 bg-red-50 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-red-800">
+                📥 {data.negativeStockCount} produto(s) vendido(s) sem estoque
+              </h2>
+              <p className="text-sm text-red-700 mt-1">
+                O saldo está negativo até você dar entrada na nota. Enquanto isso,
+                o estoque desses itens não vale como número.
+              </p>
+              {data.negativeStockProducts?.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-red-800">
+                  {data.negativeStockProducts.map((p) => (
+                    <li key={p.id} className="tabular-nums">
+                      {p.emoji} {p.name}
+                      <strong className="ml-1.5">{p.stockQuantity}</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Link to="/products?estoque=negativo"
+                  className="flex-shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">
+              Regularizar
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         <Card decoration="top" decorationColor="blue">

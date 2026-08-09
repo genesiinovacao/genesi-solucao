@@ -101,8 +101,16 @@ Desligado por padrão. Ligado, o PDV deixa passar do saldo pedindo autorização
 de supervisor (mesmo fluxo do desconto). No servidor nada muda — o sync já
 aceitava saldo negativo por causa de vendas offline concorrentes —, mas a
 movimentação de estoque passa a registrar `SEM ESTOQUE` na nota quando o
-saldo fica abaixo de zero, e o dashboard tem o filtro **saldo negativo** em
-Produtos para o gerente regularizar na entrada da nota.
+saldo fica abaixo de zero.
+
+**A divergência é cobrada em três lugares**, porque saldo negativo esquecido
+vira inventário errado e ninguém vai conferir por conta própria:
+
+| Onde | O quê |
+|---|---|
+| Carrinho do PDV | Lista os itens da venda que passaram do saldo, na hora |
+| Dashboard | Faixa vermelha no topo com a contagem e os 10 piores, só quando há pendência; o botão leva a Produtos já filtrado |
+| Produtos | Filtro **só saldo negativo** (`?estoque=negativo` na URL) |
 
 > A autorização passa por `/api/auth/authorize`, que exige rede. Offline o
 > caixa não consegue liberar — mesma limitação do desconto acima da alçada.

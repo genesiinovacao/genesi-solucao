@@ -503,6 +503,10 @@ export default function PDV() {
   const surchargeAmount = Math.max(0, Number(surcharge) || 0);
   const total = Math.max(0, subtotal - discountAmount) + surchargeAmount;
 
+  // Itens desta venda que passam do saldo — o carrinho avisa na hora, para o
+  // operador não descobrir a divergência só quando o gerente reclamar.
+  const negativeInCart = cart.filter((i) => i.quantity > i.stockAvailable);
+
   function showToast(text, kind = 'info', ms = 3000) {
     setToast({ text, kind });
     setTimeout(() => setToast(null), ms);
@@ -961,6 +965,12 @@ export default function PDV() {
 
         <div data-nav-section="totais"
              className="p-4 border-t border-slate-800 space-y-3 bg-slate-950/30">
+          {negativeInCart.length > 0 && (
+            <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800 rounded-lg px-2.5 py-2">
+              📥 Sem estoque nesta venda: {negativeInCart.map((i) => i.productName).join(', ')}.
+              <span className="text-rose-400"> Avise o gerente para dar entrada da nota.</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm text-slate-400">
             <span>Subtotal</span>
             <span>{brl(subtotal)}</span>

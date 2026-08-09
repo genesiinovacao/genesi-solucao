@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { daysUntil } from '../lib/dates';
@@ -338,8 +339,11 @@ export default function Products() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
-  // Fila de regularizacao: o que o PDV vendeu sem saldo aguardando entrada de nota
-  const [negativeOnly, setNegativeOnly] = useState(false);
+  // Fila de regularizacao: o que o PDV vendeu sem saldo aguardando entrada de nota.
+  // O aviso do Dashboard manda para ca ja filtrado (?estoque=negativo).
+  const [searchParams] = useSearchParams();
+  const [negativeOnly, setNegativeOnly] = useState(
+    () => searchParams.get('estoque') === 'negativo');
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null); // null | 'new' | produto
   const [adjusting, setAdjusting] = useState(null); // produto do ajuste de estoque
