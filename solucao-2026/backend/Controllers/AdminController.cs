@@ -335,6 +335,73 @@ public class AdminController : ControllerBase
             new Models.Dtos.Auth.UserDto(superadminId, t.Id, t.Name, "Suporte SOLUÇÃO", "suporte@plataforma.interno", "admin")));
     }
 
+    /// <summary>
+    /// Usuários do cliente, para o suporte escolher quem terá a senha
+    /// redefinida. Passa por função SECURITY DEFINER porque users tem RLS e o
+    /// superadmin opera do tenant plataforma.
+    /// </summary>
+    [HttpGet("tenants/{id:guid}/users")]
+    public async Task<ActionResult<List<AdminTenantUserDto>>> ListTenantUsers(Guid id, CancellationToken ct)
+    {
+        if (!await _db.Tenants.AnyAsync(t => t.Id == id, ct)) return NotFound();
+
+        var rows = await _db.Database
+            .SqlQuery<AdminTenantUserRow>($@"
+                SELECT user_id    AS ""UserId"",
+                       name       AS ""Name"",
+                       email::text AS ""Email"",
+                       role       AS ""Role"",
+                       is_active  AS ""IsActive"",
+                       last_login AS ""LastLogin""
+                FROM app_admin_list_tenant_users({id})")
+            .ToListAsync(ct);
+
+        return Ok(rows
+            .Select(r => new AdminTenantUserDto(r.UserId, r.Name, r.Email, r.Role, r.IsActive, r.LastLogin))
+            .ToList());
+    }
+
+    /// <summary>
+    /// Redefine a senha de um usuário do cliente, sem pedir a senha atual —
+    /// quem redefine não a conhece, e é exatamente para isso que existe:
+    /// o cliente perdeu o acesso e liga para o suporte.
+    ///
+    /// O que autoriza é o papel superadmin (no atributo da classe). O ato fica
+    /// no audit_log com quem fez e sobre quem, porque poder redefinir senha de
+    /// terceiro sem rastro é o tipo de coisa que não se explica depois.
+    /// </summary>
+    [HttpPost("tenants/{id:guid}/reset-password")]
+    public async Task<IActionResult> ResetTenantUserPassword(
+        Guid id, [FromBody] AdminResetPasswordRequest req, CancellationToken ct)
+    {
+        var t = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t is null) return NotFound();
+
+        var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+
+        // A função confere o par (usuário, cliente): id trocado por engano não
+        // atinge usuário de outra loja. NULL = par inexistente.
+        var affected = await _db.Database
+            .SqlQuery<string?>($"SELECT app_admin_reset_user_password({req.UserId}, {id}, {hash}) AS \"Value\"")
+            .ToListAsync(ct);
+
+        var email = affected.FirstOrDefault();
+        if (string.IsNullOrEmpty(email))
+            return NotFound(new { error = "Usuário não encontrado neste cliente." });
+
+        _audit.Log("admin.reset_client_password", "user", req.UserId,
+            new { tenantId = id, tenantName = t.Name, email });
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogWarning("Superadmin {Actor} redefiniu a senha de {Email} no tenant {TenantName} ({TenantId})",
+            _tenant.UserId, email, t.Name, t.Id);
+
+        return Ok(new { email });
+    }
+
+    private sealed record AdminTenantUserRow(
+        Guid UserId, string Name, string Email, string Role, bool IsActive, DateTime? LastLogin);
+
     [HttpGet("platform-logo")]
     public async Task<ActionResult<PlatformLogoDto>> GetPlatformLogo(CancellationToken ct)
     {

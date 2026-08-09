@@ -70,3 +70,24 @@ public record ImpersonationResponse(
     string AccessToken,
     DateTime ExpiresAt,
     Solucao.Backend.Models.Dtos.Auth.UserDto User);
+
+/// <summary>Usuário de um cliente, na tela de suporte. Nunca carrega o hash.</summary>
+public record AdminTenantUserDto(
+    Guid UserId,
+    string Name,
+    string Email,
+    string Role,
+    bool IsActive,
+    DateTime? LastLogin);
+
+/// <summary>
+/// Redefinição feita pelo suporte: sem senha atual, porque quem redefine não
+/// a conhece — é justamente o caso de o cliente ter perdido o acesso. O que
+/// autoriza é o papel superadmin, e o ato fica no audit_log.
+/// </summary>
+public record AdminResetPasswordRequest(
+    Guid UserId,
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(6)]
+    [System.ComponentModel.DataAnnotations.MaxLength(200)]
+    string NewPassword);

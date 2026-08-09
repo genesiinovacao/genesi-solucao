@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../lib/api';
+import TenantPasswordReset from '../components/TenantPasswordReset';
 import { auth } from '../lib/auth';
 import { daysUntil } from '../lib/dates';
 import { maskCnpj, formatDoc } from '../lib/masks';
@@ -588,6 +589,11 @@ function TenantFormModal({ tenant, groups, onGroupCreated, onClose, onSaved }) {
             </button>
           </div>
         </form>
+
+        {/* FORA do form acima: form aninhado é descartado pelo navegador, e a
+            redefinição acabaria disparando o salvamento do cadastro. Só na
+            edição — cliente novo já define a senha no próprio cadastro. */}
+        {isEdit && <TenantPasswordReset tenantId={tenant.id} tenantName={tenant.name} />}
       </div>
     </div>
   );
