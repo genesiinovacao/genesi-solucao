@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "solucao-pdv",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "private": true,
-  "description": "SOLUÇÃO 2026 — Ponto de Venda offline-first (Electron + SQLite)",
+  "description": "SOLUÃ‡ÃƒO 2026 â€” Ponto de Venda offline-first (Electron + SQLite)",
   "main": "electron/main.cjs",
   "scripts": {
     "vite": "vite",
@@ -38,7 +38,7 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "shortcutName": "SOLUÇÃO PDV",
+      "shortcutName": "SOLUÃ‡ÃƒO PDV",
       "artifactName": "SOLUCAO-PDV-Setup-${version}.${ext}"
     },
     "publish": {
@@ -70,3 +70,4 @@
     "wait-on": "^8.0.1"
   }
 }
+

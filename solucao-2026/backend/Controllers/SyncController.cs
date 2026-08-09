@@ -26,6 +26,43 @@ public class SyncController : ControllerBase
     }
 
     /// <summary>
+    /// Traduz a exceção do banco para algo que o operador do caixa consiga
+    /// repassar. "HTTP 500: Null" na tela do PDV não ajuda ninguém: o defeito
+    /// costuma ser dado (produto apagado depois da venda offline, sessão de
+    /// caixa que não existe mais), e quem vê a tela precisa saber qual.
+    /// </summary>
+    private static string Describe(Exception ex)
+    {
+        var pg = ex as Npgsql.PostgresException
+              ?? ex.InnerException as Npgsql.PostgresException;
+
+        if (pg is null) return ex.Message;
+
+        return pg.SqlState switch
+        {
+            // 23503 foreign_key_violation
+            "23503" when pg.ConstraintName?.Contains("product") == true =>
+                "Produto desta venda não existe mais no cadastro. "
+                + "Recadastre-o (ou reative) e sincronize de novo.",
+            "23503" when pg.ConstraintName?.Contains("cash_session") == true =>
+                "A sessão de caixa desta venda não existe mais no servidor. "
+                + "Feche e reabra o caixa no PDV.",
+            "23503" when pg.ConstraintName?.Contains("customer") == true =>
+                "O cliente desta venda não existe mais no cadastro.",
+            "23503" => $"Referência inexistente no servidor ({pg.ConstraintName}).",
+            // 23514 check_violation — valor novo que o banco ainda não aceita
+            "23514" => $"Valor recusado pelo banco ({pg.ConstraintName}). "
+                     + "Provavelmente falta aplicar uma migração no servidor.",
+            // 23505 unique_violation
+            "23505" => $"Registro duplicado ({pg.ConstraintName}).",
+            // 42703 undefined_column — o clássico: código novo, banco antigo
+            "42703" => $"Coluna ausente no banco ({pg.MessageText}). "
+                     + "Falta aplicar a migração correspondente.",
+            _ => $"{pg.SqlState}: {pg.MessageText}",
+        };
+    }
+
+    /// <summary>
     /// Receives a batch of sales captured offline by the PDV (Electron + SQLite).
     /// Idempotent via OfflineSyncId: duplicates are silently skipped.
     /// </summary>
@@ -59,13 +96,16 @@ public class SyncController : ControllerBase
             .Distinct()
             .ToList();
 
-        var products = await _db.Products
-            .Where(p => productIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, ct);
-
-        // Transação para manter venda + estoque + movimentações atômicos
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
+        // UMA TRANSAÇÃO POR VENDA, não uma para o lote inteiro.
+        //
+        // Antes o SaveChanges ficava fora do try/catch de cada venda: qualquer
+        // erro de banco (FK de produto apagado, sessão de caixa inexistente,
+        // CHECK novo) derrubava a requisição com 500 sem corpo, o lote inteiro
+        // era desfeito e a venda ruim voltava na tentativa seguinte — travando
+        // a fila da loja para sempre, sem dizer o motivo.
+        //
+        // Venda é evento independente: não há razão para uma arrastar as
+        // outras. Agora a boa entra, a ruim é reportada com a causa.
         foreach (var dto in salesToSync)
         {
             if (existingSet.Contains(dto.OfflineSyncId))
@@ -74,6 +114,15 @@ public class SyncController : ControllerBase
                     dto.OfflineSyncId, "AlreadySynced", null, existing[dto.OfflineSyncId]));
                 continue;
             }
+
+            // Recarrega por venda: depois de um rollback os produtos ficam com
+            // o estoque já decrementado em memória, e reaproveitá-los
+            // contaminaria a próxima venda do lote.
+            var products = await _db.Products
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, ct);
+
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
             try
             {
@@ -192,17 +241,23 @@ public class SyncController : ControllerBase
                     });
                 }
 
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+
                 results.Add(new SyncResult(dto.OfflineSyncId, "Success", null, sale.Id));
             }
             catch (Exception ex)
             {
-                _log.LogError(ex, "Failed to map sale {OfflineSyncId}", dto.OfflineSyncId);
-                results.Add(new SyncResult(dto.OfflineSyncId, "Error", ex.Message));
+                await tx.RollbackAsync(ct);
+                // Sem isto o estado sujo desta venda vai junto no SaveChanges
+                // da próxima e derruba uma venda que estava boa.
+                _db.ChangeTracker.Clear();
+
+                _log.LogError(ex, "Falha ao sincronizar a venda {OfflineSyncId} do terminal {Terminal}",
+                    dto.OfflineSyncId, dto.PosTerminalId);
+                results.Add(new SyncResult(dto.OfflineSyncId, "Error", Describe(ex)));
             }
         }
-
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
 
         // Após o commit: alerta em tempo real (SignalR) para produtos críticos
         try

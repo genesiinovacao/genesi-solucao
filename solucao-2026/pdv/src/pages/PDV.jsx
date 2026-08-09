@@ -858,8 +858,12 @@ export default function PDV() {
               <span className="pdv-chip pdv-chip-amber">⏳ {pendingCount} na fila</span>
             )}
             {syncStatus === 'syncing' && <span className="text-slate-400 text-xs">Sincronizando…</span>}
+            {/* Clicar mostra a causa por extenso: o app empacotado não tem
+                DevTools, e tooltip corta mensagem longa. Sem isto o operador
+                só via "Sync falhou" e não tinha o que repassar ao suporte. */}
             {syncStatus === 'error' && (
-              <button onClick={doSync} title={syncError || 'Erro ao sincronizar'}
+              <button onClick={() => { showToast(syncError || 'Erro ao sincronizar', 'error', 12000); doSync(); }}
+                      title={syncError || 'Erro ao sincronizar'}
                       className="pdv-chip pdv-chip-rose">⚠️ Sync falhou</button>
             )}
 

@@ -95,6 +95,22 @@ async function runSync(apiBase, jwt) {
   const tx = db.transaction(() => { for (const id of succeeded) upd.run(id); });
   tx();
 
+  // Venda recusada pelo servidor não é sucesso. Antes isto voltava ok:true e a
+  // tela dizia "sincronizado" com a venda parada na fila — o operador só
+  // descobria pelo contador que não zerava.
+  const failed = results.filter((r) => r.status === 'Error');
+  if (failed.length > 0) {
+    const detalhe = failed.map((f) => f.message).filter(Boolean).join(' · ');
+    return {
+      ok: false,
+      sent: batch.length,
+      succeeded: succeeded.length,
+      pending: batch.length - succeeded.length,
+      results,
+      error: detalhe || `${failed.length} venda(s) recusada(s) pelo servidor.`,
+    };
+  }
+
   return { ok: true, sent: batch.length, succeeded: succeeded.length, pending: batch.length - succeeded.length, results };
 }
 
