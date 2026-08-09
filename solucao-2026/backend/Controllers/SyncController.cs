@@ -187,20 +187,6 @@ public class SyncController : ControllerBase
                     }
                 }
 
-                // Orçamento que virou venda. Marcado aqui, junto da venda, e
-                // não num endpoint próprio: assim funciona igual quando o PDV
-                // fechou a venda offline e só sincronizou depois.
-                if (dto.QuoteId is { } quoteId)
-                {
-                    var quote = await _db.Quotes.FirstOrDefaultAsync(q => q.Id == quoteId, ct);
-                    if (quote is not null && quote.Status != "converted")
-                    {
-                        quote.Status = "converted";
-                        quote.ConvertedSaleId = sale.Id;
-                        quote.UpdatedAt = DateTime.UtcNow;
-                    }
-                }
-
                 // Baixa de estoque + movimentação (pode ficar negativo: vendas
                 // offline podem ultrapassar o saldo conhecido pelo servidor)
                 foreach (var item in dto.Items)
@@ -242,6 +228,24 @@ public class SyncController : ControllerBase
                 }
 
                 await _db.SaveChangesAsync(ct);
+
+                // Orçamento que virou venda, num segundo SaveChanges dentro da
+                // MESMA transação. Em dois passos de propósito: converter junto
+                // do INSERT deixava a ordem dos comandos por conta do EF, e o
+                // UPDATE do orçamento chegava a rodar antes da venda existir.
+                // Aqui a venda já está gravada quando o orçamento aponta para ela.
+                if (dto.QuoteId is { } quoteId)
+                {
+                    var quote = await _db.Quotes.FirstOrDefaultAsync(q => q.Id == quoteId, ct);
+                    if (quote is not null && quote.Status != "converted")
+                    {
+                        quote.Status = "converted";
+                        quote.ConvertedSaleId = sale.Id;
+                        quote.UpdatedAt = DateTime.UtcNow;
+                        await _db.SaveChangesAsync(ct);
+                    }
+                }
+
                 await tx.CommitAsync(ct);
 
                 results.Add(new SyncResult(dto.OfflineSyncId, "Success", null, sale.Id));

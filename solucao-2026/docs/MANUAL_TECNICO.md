@@ -216,9 +216,22 @@ cd backend.Tests; dotnet test
 viram no-op (`TransactionIgnoredWarning` suprimido); o RLS real é coberto
 pelos scripts em `database/`.
 
-Consequência a lembrar: `[Authorize(Roles=...)]` **não é aplicado** em teste
-unitário de controller. Onde a regra de papel importa, ela é repetida
-explicitamente no corpo do método (ex.: `Anonymize`).
+Duas coisas que a suíte **não** cobre — as duas já deixaram passar defeito
+para produção:
+
+1. **`[Authorize(Roles=...)]` não é aplicado** em teste unitário de
+   controller. Onde a regra de papel importa, ela é repetida explicitamente
+   no corpo do método (ex.: `Anonymize`).
+2. **O InMemory não aplica chave estrangeira nem ordem de comandos.** Foi
+   assim que a conversão de orçamento em venda subiu quebrada: o teste passava
+   verde, e o PostgreSQL recusava com `quotes_converted_sale_id_fkey` porque o
+   `UPDATE` do orçamento saía antes do `INSERT` da venda. Mexeu em
+   relacionamento entre tabelas, **teste contra Postgres de verdade** antes de
+   publicar:
+   ```powershell
+   docker compose up -d      # o compose local sobe o Postgres com o schema
+   cd backend; dotnet run    # e exercite o fluxo pela API
+   ```
 
 ## 10. Comandos úteis
 

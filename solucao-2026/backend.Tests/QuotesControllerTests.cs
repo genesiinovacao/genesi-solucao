@@ -174,6 +174,16 @@ public class QuotesControllerTests
     /// <summary>
     /// O ciclo que importa: cliente volta, a venda é sincronizada com o
     /// quoteId e o orçamento fecha apontando para a venda.
+    ///
+    /// ⚠️ Este teste passou verde enquanto a conversão estava quebrada em
+    /// produção. O provider InMemory NÃO aplica chave estrangeira, então ele
+    /// não viu que o UPDATE do orçamento saía antes do INSERT da venda — o
+    /// PostgreSQL viu, e derrubou toda sincronização de venda vinda de
+    /// orçamento com quotes_converted_sale_id_fkey.
+    ///
+    /// Vale para qualquer teste daqui: ordem de comandos e integridade
+    /// referencial não são cobertas por esta suíte. Mexeu em relacionamento
+    /// entre tabelas, teste contra Postgres de verdade antes de publicar.
     /// </summary>
     [Fact]
     public async Task SyncingSaleWithQuoteId_MarksQuoteConverted()

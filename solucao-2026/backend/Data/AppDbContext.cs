@@ -195,6 +195,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.SurchargeAmount).HasColumnType("decimal(15,2)");
             e.Property(x => x.TotalAmount).HasColumnType("decimal(15,2)");
             e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.QuoteId).OnDelete(DeleteBehavior.Cascade);
+            // Sem declarar isto, o EF não sabia que o UPDATE do orçamento
+            // depende do INSERT da venda e podia mandar os comandos na ordem
+            // errada — violando quotes_converted_sale_id_fkey e derrubando a
+            // sincronização de toda venda que vinha de orçamento.
+            e.HasOne<Sale>()
+             .WithMany()
+             .HasForeignKey(x => x.ConvertedSaleId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<QuoteItem>(e =>
