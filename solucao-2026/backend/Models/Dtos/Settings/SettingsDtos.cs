@@ -22,7 +22,9 @@ public record TenantSettingsDto(
     bool SubscriptionIsBonus,
     /// <summary>Mapa ação → tecla do PDV. Vazio = padrão do sistema.</summary>
     IReadOnlyDictionary<string, string>? PdvShortcuts = null,
-    bool AllowSaleWithoutStock = false);
+    bool AllowSaleWithoutStock = false,
+    string? StateRegistration = null,
+    decimal ApproximateTaxPercent = 0);
 
 public record UpdateTenantSettingsRequest(
     [Required, StringLength(255)] string Name,
@@ -37,4 +39,6 @@ public record UpdateTenantSettingsRequest(
     string? LogoBase64 = null,
     /// <summary>Mapa ação → tecla. Nulo mantém o que está salvo; vazio volta ao padrão.</summary>
     IReadOnlyDictionary<string, string>? PdvShortcuts = null,
-    bool? AllowSaleWithoutStock = null);
+    bool? AllowSaleWithoutStock = null,
+    string? StateRegistration = null,
+    [Range(0, 100)] decimal? ApproximateTaxPercent = null);

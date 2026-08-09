@@ -48,6 +48,8 @@ export default function Settings() {
         // Objeto vazio é o pedido explícito de voltar ao padrão; nulo mantém
         pdvShortcuts: data.pdvShortcuts ?? {},
         allowSaleWithoutStock: !!data.allowSaleWithoutStock,
+        stateRegistration: data.stateRegistration || '',
+        approximateTaxPercent: Number(data.approximateTaxPercent) || 0,
       };
       const { data: res } = await api.put('/api/settings', payload);
       setData(res);
@@ -213,6 +215,39 @@ export default function Settings() {
             <PdvShortcutsEditor
               value={data.pdvShortcuts}
               onChange={(next) => setData({ ...data, pdvShortcuts: next })} />
+          </div>
+        </section>
+
+        <section className="p-6 space-y-4">
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">🧾 Cupom fiscal (NFC-e)</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Inscrição Estadual</label>
+              <input type="text" value={data.stateRegistration || ''} maxLength={20}
+                     onChange={(e) => setData({ ...data, stateRegistration: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
+              <p className="text-xs text-slate-400 mt-1">Sai impressa no cupom, ao lado do CNPJ.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Tributos aproximados (%)
+              </label>
+              <input type="number" min="0" max="100" step="0.01"
+                     value={data.approximateTaxPercent ?? 0}
+                     onChange={(e) => setData({ ...data, approximateTaxPercent: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <p className="text-xs text-slate-400 mt-1">
+                Linha da Lei 12.741/2012 no cupom. Zero não imprime.
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <strong>O sistema ainda não emite NFC-e de verdade.</strong> O provider fiscal
+            está em modo simulado: os cupons saem no layout do DANFE, mas carimbados como
+            <strong> SEM VALOR FISCAL</strong>, e a chave não é reconhecida pela SEFAZ.
+            Para valer, faltam certificado digital A1/A3, credenciamento na SEFAZ do estado
+            e o CSC da loja. O percentual acima é uma aproximação declarada, não cálculo
+            fiscal — o correto depende do NCM de cada item.
           </div>
         </section>
 

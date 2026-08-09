@@ -72,6 +72,7 @@ export default function PrinterSettingsModal({ onClose }) {
       copies: prefs.copies,
       paperWidth: prefs.paperWidth,
       printMode: prefs.printMode,
+      bold: prefs.bold,
     });
     setTestStatus(r.ok ? '✓ Enviado para impressora.' : `⚠️ ${r.error}`);
   };
@@ -127,6 +128,19 @@ export default function PrinterSettingsModal({ onClose }) {
               <div>
                 <div className="text-sm font-medium text-white">Imprimir automaticamente após cada venda</div>
                 <div className="text-xs text-slate-400">Dispara assim que a venda for confirmada.</div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={!!prefs.bold}
+                     onChange={(e) => setPrefs({ ...prefs, bold: e.target.checked })}
+                     className="mt-0.5 w-4 h-4 accent-blue-500" />
+              <div>
+                <div className="text-sm font-medium text-white">Impressão reforçada (negrito)</div>
+                <div className="text-xs text-slate-400">
+                  Para cupom saindo apagado. Marca mais dots por caractere —
+                  ajuda em bobina fraca, mas o ajuste principal é a
+                  <strong className="text-slate-300"> densidade no driver da impressora</strong>.
+                </div>
               </div>
             </label>
           </div>

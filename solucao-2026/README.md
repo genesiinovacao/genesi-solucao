@@ -38,8 +38,8 @@ solucao-2026/
 ├── pdv/                        # Electron PDV (desktop, offline-first)
 │   ├── electron/               # main, preload, db (SQLite), sync, print, updater
 │   └── src/{pages,components,lib}
-├── database/                   # 01…19 — aplicados À MÃO, em ordem (ver DEPLOY.md)
-├── backend.Tests/              # 139 testes xUnit — rodam sem Postgres
+├── database/                   # 01…21 — aplicados À MÃO, em ordem (ver DEPLOY.md)
+├── backend.Tests/              # 154 testes xUnit — rodam sem Postgres
 ├── tools/{HashGen,SqlRun}/     # Hash BCrypt · executor de .sql sem psql
 └── docs/                       # ARQUITETURA · DEPLOY · LGPD · MANUAL_TECNICO
 ```
@@ -114,7 +114,7 @@ cd backend.Tests
 dotnet test
 ```
 
-139 testes cobrindo JWT (emissão/claims/refresh), sincronização do PDV
+154 testes cobrindo JWT (emissão/claims/refresh), sincronização do PDV
 (idempotência, baixa de estoque, estoque negativo, vale crédito, acréscimo),
 módulo fiscal, ciclo de cobrança, LGPD (anonimização e exportação),
 autorização de supervisor (sangria e devolução), PIN de operador, redes de
@@ -273,7 +273,7 @@ letra e número é o que o leitor de código de barras "digita".
 |---|---|
 | Preços reais dos planos | `Billing:Plans` no appsettings — valores ainda são placeholder |
 | PIX real | Falta conta + `Billing__MercadoPago__AccessToken`; hoje `simulated` confirma sozinho em ~20s |
-| NFC-e real | `Fiscal:Provider` = simulado; falta certificado e homologação |
+| NFC-e real | `Fiscal:Provider` = simulado. O cupom já sai no layout DANFE (chave, QR, tributos), mas **carimbado SEM VALOR FISCAL** — falta certificado A1/A3, credenciamento na SEFAZ, CSC da loja e um provider real |
 | Documentos jurídicos LGPD | Política de privacidade, DPA, DPO — ver [docs/LGPD.md §6](docs/LGPD.md) |
 | Orçamento exige servidor | Precisa do número sequencial; é a única função do PDV que não é offline-first |
 | Cold start do Render | ~50s no free tier após 15 min ocioso |

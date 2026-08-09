@@ -41,12 +41,21 @@ public sealed class SimulatedFiscalProvider : IFiscalProvider
 
         var xml = BuildDemoXml(doc, sale, tenant, accessKey, protocol, now);
 
+        // QR no formato da NFC-e, mas SEM assinatura válida: o hash real usa o
+        // CSC da loja, que só existe com credenciamento na SEFAZ. Scaneado,
+        // este QR não valida — serve para conferir o layout do cupom, e por
+        // isso o DANFE impresso em modo simulado carrega "SEM VALOR FISCAL".
+        var consultaUrl = "https://www.homologacao.nfce.fazenda.sp.gov.br/consulta";
+        var qr = $"{consultaUrl}?p={accessKey}|2|2|1|SIMULADO";
+
         return Task.FromResult(new FiscalEmissionResult(
             Authorized: true,
             AccessKey: accessKey,
             ProtocolNumber: protocol,
             Xml: xml,
-            RejectionReason: null));
+            RejectionReason: null,
+            QrCodeData: qr,
+            ConsultaUrl: consultaUrl));
     }
 
     public Task<bool> CancelAsync(FiscalDocument document, string reason, CancellationToken ct)

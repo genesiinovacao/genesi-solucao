@@ -94,6 +94,7 @@ export default function QuoteModal({
       copies: prefs.copies || 1,
       paperWidth: prefs.paperWidth || 80,
       printMode: prefs.printMode || 1,
+      bold: prefs.bold,
     });
   };
 

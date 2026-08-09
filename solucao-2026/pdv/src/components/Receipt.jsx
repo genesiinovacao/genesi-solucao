@@ -33,6 +33,8 @@ export default function Receipt({ sale, onClose, onPrint }) {
       // configurado — era a causa do corte nas vendas.
       paperWidth: prefs.paperWidth || 80,
       printMode: prefs.printMode || 1,
+      bold: prefs.bold,
+      fiscal: sale.fiscal || null,
     });
     if (r.ok) {
       setSilentStatus('✓ Cupom enviado.');

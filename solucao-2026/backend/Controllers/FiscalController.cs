@@ -87,6 +87,8 @@ public class FiscalController : ControllerBase
         doc.ProtocolNumber = result.ProtocolNumber;
         doc.Xml = result.Xml;
         doc.RejectionReason = result.RejectionReason;
+        doc.QrCodeData = result.QrCodeData;
+        doc.ConsultaUrl = result.ConsultaUrl;
         doc.IssuedAt = result.Authorized ? DateTime.UtcNow : null;
 
         _db.FiscalDocuments.Add(doc);
@@ -134,6 +136,51 @@ public class FiscalController : ControllerBase
             .OrderByDescending(d => d.CreatedAt)
             .FirstOrDefaultAsync(ct);
         return doc is null ? NotFound() : Ok(ToDto(doc));
+    }
+
+    /// <summary>
+    /// Cupom fiscal pronto para o PDV imprimir: emitente, documento, QR e o
+    /// valor aproximado dos tributos. A regra fiscal fica aqui — o PDV só
+    /// desenha o que recebe.
+    /// </summary>
+    [HttpGet("sales/{saleId:guid}/receipt")]
+    public async Task<ActionResult<FiscalReceiptDto>> ReceiptData(Guid saleId, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return Unauthorized();
+
+        var doc = await _db.FiscalDocuments.AsNoTracking()
+            .Where(d => d.SaleId == saleId && d.Status == "authorized")
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (doc is null) return NotFound(new { error = "Venda sem documento fiscal autorizado." });
+
+        var sale = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(s => s.Id == saleId, ct);
+        if (sale is null) return NotFound();
+
+        var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == tenantId, ct);
+
+        string? customerTaxId = null;
+        if (sale.CustomerId is { } cid)
+        {
+            customerTaxId = await _db.Customers.AsNoTracking()
+                .Where(c => c.Id == cid).Select(c => c.TaxId).FirstOrDefaultAsync(ct);
+        }
+
+        // A trava. Layout de DANFE só vale como DANFE com autorização de
+        // verdade; fora disso o cupom sai carimbado.
+        var real = doc.Provider != "simulated" && doc.Environment == "production";
+        var warning = real ? null
+            : doc.Environment != "production"
+                ? "EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+                : "DOCUMENTO SIMULADO - SEM VALOR FISCAL";
+
+        var tax = Math.Round(sale.TotalAmount * tenant.ApproximateTaxPercent / 100m, 2);
+
+        return Ok(new FiscalReceiptDto(
+            tenant.Name, tenant.Cnpj, tenant.StateRegistration, tenant.Address, tenant.Phone,
+            doc.Number, doc.Series, doc.IssuedAt, doc.AccessKey, doc.ProtocolNumber,
+            doc.QrCodeData, doc.ConsultaUrl, doc.Status, doc.Environment, doc.Provider,
+            real, warning, tax, customerTaxId));
     }
 
     /// <summary>XML do documento (simulado enquanto o provider for 'simulated').</summary>

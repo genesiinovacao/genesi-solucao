@@ -20,6 +20,14 @@ public class Tenant
     public string? LogoEmoji { get; set; }
     public string? LogoBase64 { get; set; }
     public string Segment { get; set; } = "supermercado";
+    /// <summary>Inscrição Estadual — sai impressa no DANFE ao lado do CNPJ.</summary>
+    public string? StateRegistration { get; set; }
+    /// <summary>
+    /// Percentual do "valor aproximado dos tributos" (Lei 12.741/2012).
+    /// É aproximação declarada pela loja, não cálculo fiscal: o correto
+    /// depende do NCM de cada item e da tabela IBPT. Zero não imprime.
+    /// </summary>
+    public decimal ApproximateTaxPercent { get; set; }
     /// <summary>
     /// Mapa JSON ação → tecla para o PDV. Nulo = padrão do sistema. Existe
     /// para a loja que migra de outro sistema manter a musculatura do caixa.

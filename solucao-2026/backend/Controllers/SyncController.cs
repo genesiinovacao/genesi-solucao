@@ -41,12 +41,14 @@ public class SyncController : ControllerBase
         var results = new List<SyncResult>(salesToSync.Count);
         var incomingIds = salesToSync.Select(s => s.OfflineSyncId).ToList();
 
-        var existingIds = await _db.Sales
+        // Mapa, não só conjunto: o reenvio precisa devolver o id da venda
+        // que já existe, senão o PDV não consegue emitir a nota dela.
+        var existing = await _db.Sales
             .Where(s => s.OfflineSyncId != null && incomingIds.Contains(s.OfflineSyncId.Value))
-            .Select(s => s.OfflineSyncId!.Value)
-            .ToListAsync(ct);
+            .Select(s => new { s.Id, SyncId = s.OfflineSyncId!.Value })
+            .ToDictionaryAsync(x => x.SyncId, x => x.Id, ct);
 
-        var existingSet = existingIds.ToHashSet();
+        var existingSet = existing.Keys.ToHashSet();
 
         // Carrega de uma vez os produtos vendidos para dar baixa de estoque
         var productIds = salesToSync
@@ -68,7 +70,8 @@ public class SyncController : ControllerBase
         {
             if (existingSet.Contains(dto.OfflineSyncId))
             {
-                results.Add(new SyncResult(dto.OfflineSyncId, "AlreadySynced", null));
+                results.Add(new SyncResult(
+                    dto.OfflineSyncId, "AlreadySynced", null, existing[dto.OfflineSyncId]));
                 continue;
             }
 
@@ -189,7 +192,7 @@ public class SyncController : ControllerBase
                     });
                 }
 
-                results.Add(new SyncResult(dto.OfflineSyncId, "Success", null));
+                results.Add(new SyncResult(dto.OfflineSyncId, "Success", null, sale.Id));
             }
             catch (Exception ex)
             {
@@ -247,4 +250,9 @@ public record SalePaymentSyncDto(
     decimal Amount,
     string? AuthorizationCode);
 
-public record SyncResult(Guid OfflineSyncId, string Status, string? Message);
+public record SyncResult(
+    Guid OfflineSyncId,
+    string Status,
+    string? Message,
+    /// <summary>Id da venda no servidor — o PDV usa para emitir a nota fiscal.</summary>
+    Guid? SaleId = null);

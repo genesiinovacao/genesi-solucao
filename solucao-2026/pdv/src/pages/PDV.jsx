@@ -242,18 +242,23 @@ export default function PDV() {
 
   // ---- Background sync ----
   const doSync = async () => {
-    if (!isOnline) return;
+    if (!isOnline) return null;
+    let result = null;
     setSyncStatus('syncing');
     try {
       const r = await window.pdv.syncNow(API_BASE, auth.getAccessToken());
       setSyncStatus(r?.ok ? 'ok' : 'error');
       setSyncError(r?.ok ? null : r?.error || 'Falha na sincronização');
+      result = r;
     } catch (err) {
       setSyncStatus('error');
       setSyncError(err?.message || 'Falha na sincronização');
     }
     const pending = await window.pdv.getPendingSales();
     setPendingCount(pending.length);
+    // Devolvido para quem acabou de vender achar o id da venda no servidor
+    // e emitir a nota fiscal dela.
+    return result;
   };
 
   useEffect(() => {
@@ -724,25 +729,59 @@ export default function PDV() {
       await window.pdv.saveSale(sale);
       clearCart();
       await loadLocal();
-      setLastSale(sale);
-      if (isOnline) doSync();
+
+      // Documento fiscal só existe depois que a venda chega ao servidor. Se
+      // estiver offline, o cupom sai não fiscal e a nota é emitida depois
+      // pelo dashboard — é a contrapartida de vender sem internet.
+      let fiscal = null;
+      if (isOnline) {
+        const synced = await doSync();
+        const saleId = synced?.results
+          ?.find((r) => r.offlineSyncId === sale.offlineSyncId)?.saleId;
+        if (saleId) fiscal = await fetchFiscalReceipt(saleId);
+      }
+
+      const printable = { ...sale, fiscal };
+      setLastSale(printable);
 
       // Impressão automática silenciosa — se configurada.
       const prefs = printerPrefs.get();
       if (prefs.silent && prefs.auto) {
         window.pdv.printReceiptSilent({
-          sale,
+          sale: printable,
+          fiscal,
           tenantName: storeName || user?.tenantName,
           deviceName: prefs.deviceName || undefined,
           copies: prefs.copies || 1,
           paperWidth: prefs.paperWidth || 80,
           printMode: prefs.printMode || 1,
+          bold: prefs.bold,
         }).then((r) => {
           if (!r.ok) showToast(`Impressora: ${r.error}`, 'error');
         });
       }
     } catch (err) {
       showToast(`Erro ao salvar: ${err?.message || err}`, 'error');
+    }
+  };
+
+  /**
+   * Emite a NFC-e da venda recém-sincronizada e devolve o que o cupom precisa.
+   * Falhar aqui não pode travar o caixa: a venda já aconteceu, e a nota pode
+   * ser emitida depois pelo dashboard — o cupom sai como não fiscal.
+   */
+  const fetchFiscalReceipt = async (saleId) => {
+    try {
+      await api.post(`/api/fiscal/sales/${saleId}/emit`, {}).catch((err) => {
+        // 409 = já emitida; qualquer outro erro cai no cupom não fiscal
+        if (err.response?.status !== 409) throw err;
+      });
+
+      const { data } = await api.get(`/api/fiscal/sales/${saleId}/receipt`);
+      return data;
+    } catch (err) {
+      showToast('Nota fiscal não emitida agora — o cupom sai sem valor fiscal.', 'error', 5000);
+      return null;
     }
   };
 

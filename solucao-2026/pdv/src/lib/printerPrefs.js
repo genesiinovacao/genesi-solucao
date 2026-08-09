@@ -14,6 +14,10 @@ const defaults = {
   // Como a página é enviada ao driver. Varia por modelo — ver o modal.
   // 1 = margem zero (padrão) · 2 = margem zero + página exata · 3 = driver decide
   printMode: 1,
+  // Imprime tudo em negrito. Mais dots por caractere: ajuda quando o cupom
+  // sai falhado por bobina fraca ou cabeça gasta. Não substitui a densidade
+  // do driver, que é onde o ajuste de verdade fica.
+  bold: false,
 };
 
 export const printerPrefs = {

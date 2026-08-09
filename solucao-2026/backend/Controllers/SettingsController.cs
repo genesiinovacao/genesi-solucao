@@ -60,7 +60,8 @@ public class SettingsController : ControllerBase
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
             t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus,
-            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock));
+            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock,
+            t.StateRegistration, t.ApproximateTaxPercent));
     }
 
     /// <summary>
@@ -129,6 +130,10 @@ public class SettingsController : ControllerBase
         }
 
         if (req.AllowSaleWithoutStock is { } allow) t.AllowSaleWithoutStock = allow;
+        if (req.StateRegistration is not null)
+            t.StateRegistration = string.IsNullOrWhiteSpace(req.StateRegistration)
+                ? null : req.StateRegistration.Trim();
+        if (req.ApproximateTaxPercent is { } tax) t.ApproximateTaxPercent = tax;
 
         await _db.SaveChangesAsync(ct);
 
@@ -139,6 +144,7 @@ public class SettingsController : ControllerBase
             t.Id, t.Name, t.Cnpj, t.PlanType, t.Phone, t.Email, t.Address,
             t.DailySalesTarget, t.MaxDiscountPercent, t.TaxRegime, t.LogoEmoji, t.LogoBase64, t.Segment, globalLogo,
             t.SubscriptionExpiresAt, IsBlocked(t.SubscriptionExpiresAt), t.SubscriptionIsBonus,
-            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock));
+            ParseShortcuts(t.PdvShortcuts), t.AllowSaleWithoutStock,
+            t.StateRegistration, t.ApproximateTaxPercent));
     }
 }

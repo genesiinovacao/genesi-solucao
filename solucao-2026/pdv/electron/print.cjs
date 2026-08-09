@@ -5,6 +5,7 @@
 const { BrowserWindow, ipcMain, app } = require('electron');
 const fs = require('fs');
 const os = require('os');
+const QRCode = require('qrcode');
 const path = require('path');
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -17,6 +18,18 @@ const methodLabels = {
   debit: 'Débito', crediario: 'Crediário', mixed: 'Misto',
   transfer: 'Transferência', store_credit: 'Vale crédito',
 };
+
+/** Chave de acesso em grupos de 4, como sai no cupom da SEFAZ. */
+function groupKey(key) {
+  return String(key || '').replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim();
+}
+
+/** CNPJ 12345678000199 → 12.345.678/0001-99 */
+function formatCnpj(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length !== 14) return v || '';
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -37,7 +50,7 @@ function resolvePaperWidth(deviceName, configured) {
   return Number(configured) === 58 ? 58 : 80;
 }
 
-function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
+function buildReceiptHtml({ sale, tenantName, paperWidth = 80, fiscal = null, qrDataUrl = null, bold = false }) {
   const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
 
   // A largura escolhida define só a densidade do texto. O cupom em si é
@@ -88,7 +101,11 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     -webkit-font-smoothing: none;
     font-smooth: never;
     text-rendering: geometricPrecision;
+    ${bold ? 'font-weight: 700;' : ''}
   }
+  /* Reforço: mais dots por caractere. Não substitui a densidade do driver,
+     mas ajuda em bobina fraca ou cabeça já gasta. */
+  ${bold ? '* { font-weight: 700 !important; }' : ''}
   * { color: #000 !important; }
   /* Limitado à área imprimível: nada pode ultrapassar a borda do papel */
   .receipt { width: ${printableWidth}; max-width: ${printableWidth};
@@ -107,12 +124,23 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
   .total { font-size: ${baseFont + 2}px; font-weight: 700; }
   .item { margin-bottom: 3px; }
   .item .name { word-break: break-word; }
+  .warn { border: 2px solid #000; padding: 4px; margin: 5px 0;
+          text-align: center; font-weight: 700; font-size: ${baseFont}px; }
+  .key { font-family: monospace; font-size: ${baseFont - 1}px;
+         word-break: break-all; text-align: center; line-height: 1.35; }
+  .qr { text-align: center; margin: 5px 0; }
+  .qr img { width: ${narrow ? '30mm' : '38mm'}; height: auto; image-rendering: pixelated; }
 </style>
 </head><body>
   <div class="receipt">
     <div class="center b big">${safeName}</div>
-    <div class="center small">Cupom Não Fiscal</div>
+    ${fiscalHeaderHtml(fiscal)}
+    ${fiscal
+      ? '<div class="center small b">Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica</div>'
+      : '<div class="center small">Cupom Não Fiscal</div>'}
     <div class="center small">${dt(sale.saleDateIso)}</div>
+    ${fiscal && fiscal.warningLabel
+      ? `<div class="warn">${escapeHtml(fiscal.warningLabel)}</div>` : ''}
     <div class="hr"></div>
     <div class="small">Cupom: ${escapeHtml((sale.offlineSyncId || '').slice(0, 8).toUpperCase())}</div>
     ${sale.customerName ? `<div class="small">Cliente: ${escapeHtml(sale.customerName)}</div>` : ''}
@@ -121,15 +149,18 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
     ${itemsHtml}
 
     <div class="hr"></div>
+    <div class="row"><span>Qtde total de itens</span><span>${sale.items.length}</span></div>
     <div class="row"><span>Subtotal</span><span>${brl(sale.subtotal)}</span></div>
     ${sale.discountAmount > 0 ? `<div class="row"><span>Desconto</span><span>- ${brl(sale.discountAmount)}</span></div>` : ''}
     ${sale.surchargeAmount > 0 ? `<div class="row"><span>Acréscimo</span><span>+ ${brl(sale.surchargeAmount)}</span></div>` : ''}
     <div class="row total"><span>TOTAL</span><span>${brl(sale.totalAmount)}</span></div>
 
     <div class="hr"></div>
-    <div class="b small">Pagamento:</div>
+    <div class="b small">Forma de Pagamento:</div>
     ${paymentsHtml}
     ${sale.changeAmount > 0 ? `<div class="row"><span>&nbsp;&nbsp;Troco</span><span>${brl(sale.changeAmount)}</span></div>` : ''}
+
+    ${fiscalFooterHtml(fiscal, qrDataUrl)}
 
     <div class="hr"></div>
     <div class="center small">Obrigado pela preferência!</div>
@@ -138,12 +169,68 @@ function buildReceiptHtml({ sale, tenantName, paperWidth = 80 }) {
 </body></html>`;
 }
 
+/** Identificação do emitente — só existe em cupom com documento fiscal. */
+function fiscalHeaderHtml(fiscal) {
+  if (!fiscal) return '';
+  const linhas = [
+    `CNPJ ${formatCnpj(fiscal.emitCnpj)}`,
+    fiscal.emitStateRegistration ? `IE ${escapeHtml(fiscal.emitStateRegistration)}` : null,
+  ].filter(Boolean).join('&nbsp;&nbsp;');
+
+  return `
+    <div class="center small">${linhas}</div>
+    ${fiscal.emitAddress ? `<div class="center small">${escapeHtml(fiscal.emitAddress)}</div>` : ''}
+    ${fiscal.emitPhone ? `<div class="center small">Telefone: ${escapeHtml(fiscal.emitPhone)}</div>` : ''}`;
+}
+
+/**
+ * Bloco fiscal: tributos, número/série, chave, QR e protocolo. É a parte que
+ * o consumidor usa para conferir a nota no site da SEFAZ.
+ */
+function fiscalFooterHtml(fiscal, qrDataUrl) {
+  if (!fiscal) return '';
+
+  const emissao = fiscal.issuedAt ? dt(fiscal.issuedAt) : '';
+  return `
+    <div class="hr"></div>
+    ${fiscal.approximateTaxAmount > 0 ? `
+      <div class="small">Informação dos Tributos Totais Incidentes</div>
+      <div class="row small"><span>(Lei Federal 12.741/2012)</span><span>${brl(fiscal.approximateTaxAmount)}</span></div>
+    ` : ''}
+
+    <div class="hr"></div>
+    <div class="center small b">Via Consumidor</div>
+    <div class="row small"><span>Número</span><span>${fiscal.number}</span></div>
+    <div class="row small"><span>Série</span><span>${fiscal.series}</span></div>
+    ${emissao ? `<div class="row small"><span>Emissão</span><span>${emissao}</span></div>` : ''}
+
+    ${fiscal.accessKey ? `
+      ${fiscal.consultaUrl ? `
+        <div class="center small" style="margin-top:4px">Consulte pela Chave de Acesso em</div>
+        <div class="center small">${escapeHtml(fiscal.consultaUrl)}</div>` : ''}
+      <div class="center b small" style="margin-top:4px">CHAVE DE ACESSO</div>
+      <div class="key">${groupKey(fiscal.accessKey)}</div>` : ''}
+
+    <div class="hr"></div>
+    <div class="center small b">${fiscal.customerTaxId
+      ? `CONSUMIDOR CPF/CNPJ: ${escapeHtml(fiscal.customerTaxId)}`
+      : 'CONSUMIDOR NÃO IDENTIFICADO'}</div>
+
+    ${qrDataUrl ? `
+      <div class="center small" style="margin-top:4px">Consulta via leitor de QR Code</div>
+      <div class="qr"><img src="${qrDataUrl}" alt=""></div>` : ''}
+
+    ${fiscal.protocolNumber ? `
+      <div class="center small">Protocolo de Autorização ${escapeHtml(fiscal.protocolNumber)}</div>` : ''}
+    ${fiscal.warningLabel ? `<div class="warn">${escapeHtml(fiscal.warningLabel)}</div>` : ''}`;
+}
+
 /**
  * Orçamento. Mesma folha e mesmo CSS do cupom — o que muda é o miolo:
  * sem pagamento, sem troco, e com número e validade em destaque, que é o
  * que o cliente confere quando volta com o papel dias depois.
  */
-function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
+function buildQuoteHtml({ quote, tenantName, paperWidth = 80, bold = false }) {
   const safeName = escapeHtml(tenantName || 'SOLUÇÃO 2026');
   const narrow = Number(paperWidth) === 58;
   const baseFont = narrow ? 10 : 12;
@@ -178,7 +265,11 @@ function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
     -webkit-font-smoothing: none;
     font-smooth: never;
     text-rendering: geometricPrecision;
+    ${bold ? 'font-weight: 700;' : ''}
   }
+  /* Reforço: mais dots por caractere. Não substitui a densidade do driver,
+     mas ajuda em bobina fraca ou cabeça já gasta. */
+  ${bold ? '* { font-weight: 700 !important; }' : ''}
   * { color: #000 !important; }
   .receipt { width: ${printableWidth}; max-width: ${printableWidth};
              padding: ${narrow ? '2mm 1mm' : '4mm 2mm'};
@@ -227,7 +318,35 @@ function buildQuoteHtml({ quote, tenantName, paperWidth = 80 }) {
 
 // Cria janela oculta, carrega o HTML, imprime silenciosamente e fecha.
 // Com `quote` no payload imprime orçamento; com `sale`, o cupom da venda.
-function printSilent({ sale, quote, tenantName, deviceName, copies = 1, paperWidth = 80, silent = true, printMode = 1 }) {
+async function printSilent({
+  sale, quote, fiscal = null, tenantName, deviceName,
+  copies = 1, paperWidth = 80, silent = true, printMode = 1, bold = false,
+}) {
+  // QR do DANFE gerado localmente: o cupom sai igual sem internet, e nenhum
+  // dado da venda vai parar num serviço de terceiro.
+  let qrDataUrl = null;
+  if (fiscal && fiscal.qrCodeData) {
+    try {
+      qrDataUrl = await QRCode.toDataURL(fiscal.qrCodeData, {
+        errorCorrectionLevel: 'M', margin: 1, scale: 6,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      });
+    } catch (err) {
+      // Sem QR o cupom ainda serve: a chave de acesso impressa permite a
+      // consulta manual no site da SEFAZ.
+      console.error('[print] falha ao gerar QR:', err.message);
+    }
+  }
+  return printSilentInner({
+    sale, quote, fiscal, qrDataUrl, tenantName, deviceName,
+    copies, paperWidth, silent, printMode, bold,
+  });
+}
+
+function printSilentInner({
+  sale, quote, fiscal, qrDataUrl, tenantName, deviceName,
+  copies, paperWidth, silent, printMode, bold,
+}) {
   // O nome da impressora manda: evita cupom largo demais quando a opção da
   // tela não corresponde ao equipamento instalado.
   paperWidth = resolvePaperWidth(deviceName, paperWidth);
@@ -238,8 +357,8 @@ function printSilent({ sale, quote, tenantName, deviceName, copies = 1, paperWid
       webPreferences: { offscreen: false, sandbox: true },
     });
     const html = quote
-      ? buildQuoteHtml({ quote, tenantName, paperWidth })
-      : buildReceiptHtml({ sale, tenantName, paperWidth });
+      ? buildQuoteHtml({ quote, tenantName, paperWidth, bold })
+      : buildReceiptHtml({ sale, tenantName, paperWidth, fiscal, qrDataUrl, bold });
 
     // Espera a renderização assentar: em janela oculta o layout pode não
     // estar pronto no did-finish-load, e o driver receberia página vazia.

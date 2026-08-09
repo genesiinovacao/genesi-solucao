@@ -9,7 +9,14 @@ public record FiscalEmissionResult(
     string? AccessKey,
     string? ProtocolNumber,
     string? Xml,
-    string? RejectionReason);
+    string? RejectionReason,
+    /// <summary>
+    /// Conteúdo do QR Code da NFC-e. Um QR que a SEFAZ valida depende do CSC
+    /// da loja e de hash SHA-1 sobre os parâmetros — só provider real produz.
+    /// </summary>
+    string? QrCodeData = null,
+    /// <summary>URL de consulta pela chave, que muda por UF.</summary>
+    string? ConsultaUrl = null);
 
 /// <summary>
 /// Abstração da emissão fiscal. O provider default é o simulado (sem SEFAZ).

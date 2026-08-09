@@ -136,7 +136,68 @@ janela oculta.
 > montada ao contrário — o autoteste da própria impressora sai em branco
 > quando isso acontece. Vale conferir o hardware antes de mexer no código.
 
-## 7. Módulos plugáveis
+### Cupom saindo apagado
+
+Na ordem do que mais resolve:
+
+1. **Densidade/darkness no driver** (Windows → Impressoras → Preferências).
+   É o ajuste de verdade: define quanta energia cada dot recebe. O HTML não
+   alcança isso.
+2. **Velocidade de impressão** mais baixa, no mesmo painel — mais tempo por
+   dot, marca mais forte.
+3. **Bobina.** Papel térmico barato ou vencido perde sensibilidade; a face
+   térmica é só uma das duas.
+4. **Cabeça suja** — limpar com álcool isopropílico. Sujeira costuma dar
+   falha localizada, não apagamento geral.
+5. **`bold` nas preferências do PDV** — engrossa o traço. Ajuda, mas é o
+   último recurso, não o primeiro.
+
+Cabeça gasta dá risco vertical branco contínuo, não apagamento uniforme.
+
+## 7. Cupom fiscal (DANFE da NFC-e)
+
+O cupom sai em dois formatos, decididos pelo servidor em
+`GET /api/fiscal/sales/{id}/receipt`:
+
+| Situação | O que imprime |
+|---|---|
+| Venda sem documento autorizado | "Cupom Não Fiscal", como antes |
+| Documento autorizado | Layout DANFE: emitente com CNPJ/IE, tributos da Lei 12.741, número/série/emissão, chave em grupos de 4, QR Code, protocolo |
+
+### A trava
+
+`FiscalReceiptDto.HasFiscalValue` só é verdadeiro com **provider real** *e*
+**ambiente de produção**. Qualquer outra combinação devolve `WarningLabel` e o
+cupom sai com o carimbo **SEM VALOR FISCAL** em duas posições — topo e rodapé.
+
+Isso não é preciosismo: um cupom com layout de nota fiscal e chave que a SEFAZ
+não reconhece é documento enganoso. Enquanto `Fiscal:Provider` for
+`simulated`, todo cupom sai carimbado. `FiscalReceiptTests` trava a regra
+para as três combinações que não valem.
+
+### O que falta para emitir de verdade
+
+Certificado digital A1/A3, credenciamento na SEFAZ do estado, CSC (Código de
+Segurança do Contribuinte) da loja e um provider real implementando
+`IFiscalProvider` (Focus NFe, PlugNotas, TecnoSpeed). O QR Code só é válido
+com o hash SHA-1 sobre o CSC — o simulado gera um QR de formato correto que
+**não valida**.
+
+### Momento da emissão
+
+O PDV vende offline, então a nota não existe na hora da venda: depois de
+gravar, se houver rede, ele sincroniza, chama `emit` e busca o cupom. Sem
+rede, imprime o não fiscal e a nota é emitida depois pelo dashboard.
+`SyncResult.SaleId` existe justamente para o PDV saber qual venda emitir —
+pegar "a última venda" quebraria com dois caixas.
+
+### Tributos aproximados
+
+`tenants.approximate_tax_percent` × total. É aproximação declarada pela loja,
+não cálculo fiscal: o correto depende do NCM de cada item e da tabela IBPT,
+que o sistema não tem. Zero não imprime a linha.
+
+## 8. Módulos plugáveis
 
 | Módulo | Interface | Implementações |
 |---|---|---|
@@ -145,13 +206,13 @@ janela oculta.
 
 Trocar por configuração: `Billing:Provider` e `Fiscal:Provider`.
 
-## 8. Testes
+## 9. Testes
 
 ```powershell
 cd backend.Tests; dotnet test
 ```
 
-146 testes xUnit sobre provider InMemory — rodam sem Postgres. Transações
+154 testes xUnit sobre provider InMemory — rodam sem Postgres. Transações
 viram no-op (`TransactionIgnoredWarning` suprimido); o RLS real é coberto
 pelos scripts em `database/`.
 
@@ -159,7 +220,7 @@ Consequência a lembrar: `[Authorize(Roles=...)]` **não é aplicado** em teste
 unitário de controller. Onde a regra de papel importa, ela é repetida
 explicitamente no corpo do método (ex.: `Anonymize`).
 
-## 9. Comandos úteis
+## 10. Comandos úteis
 
 ```powershell
 # Backend
@@ -176,7 +237,7 @@ cd pdv; npm run rebuild                   # better-sqlite3 para a versão do Ele
 dotnet run --project tools/SqlRun -- "<conn>" database/20_algo.sql
 ```
 
-## 10. Segurança
+## 11. Segurança
 
 - TLS em todas as pontas.
 - O `TenantId` nunca aparece em URL nem header — só na claim assinada do JWT.
