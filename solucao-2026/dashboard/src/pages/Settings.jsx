@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { formatDoc } from '../lib/masks';
 import PdvShortcutsEditor from '../components/PdvShortcutsEditor';
+import ChangePasswordForm from '../components/ChangePasswordForm';
 
 const regimes = [
   { v: 'simples_nacional', l: 'Simples Nacional' },
@@ -280,6 +281,15 @@ export default function Settings() {
           </button>
         </footer>
       </form>
+
+      {/* Card separado, FORA do form acima: form aninhado é descartado pelo
+          navegador, e "Salvar alterações" acabaria submetendo a troca de senha. */}
+      <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mt-6">
+        <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+          🔑 Minha senha
+        </h2>
+        <ChangePasswordForm />
+      </section>
     </div>
   );
 }

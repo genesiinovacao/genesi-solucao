@@ -14,6 +14,7 @@ import Reports from './pages/Reports';
 import Ai from './pages/Ai';
 import Team from './pages/Team';
 import Settings from './pages/Settings';
+import Account from './pages/Account';
 import Layout from './components/Layout';
 
 function RequireAuth({ children }) {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="ai"         element={<Ai />} />
         <Route path="team"       element={<Team />} />
         <Route path="settings"   element={<Settings />} />
+        <Route path="account"    element={<Account />} />
         <Route path="admin"      element={<Admin />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

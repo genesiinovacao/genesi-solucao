@@ -86,7 +86,12 @@ export default function Layout() {
     window.location.assign('/admin');
   };
   const navItems = isSuper
-    ? [{ to: '/admin', label: 'Administração', icon: '🛠️' }]
+    ? [
+        { to: '/admin',   label: 'Administração', icon: '🛠️' },
+        // Sem isto o superadmin não teria como trocar a própria senha pela
+        // tela: o menu dele não passa por Configurações.
+        { to: '/account', label: 'Minha conta',   icon: '🔑' },
+      ]
     : [
         { to: '/dashboard',  label: 'Dashboard',     icon: '📊' },
         { to: '/products',   label: 'Produtos',      icon: '📦' },

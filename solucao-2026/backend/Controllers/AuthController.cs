@@ -203,6 +203,78 @@ public class AuthController : ControllerBase
             new UserDto(token.UserId, token.TenantId, token.TenantName, token.Name, token.Email, token.Role)));
     }
 
+    /// <summary>
+    /// Troca a própria senha. Vale para qualquer papel, inclusive superadmin —
+    /// que era justamente quem não tinha saída pela tela: o reset de
+    /// UsersController é do admin sobre a equipe dele e recusa superadmin,
+    /// então recuperar essa conta exigia SQL no banco.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest req, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                       ?? User.FindFirstValue("sub");
+        if (!Guid.TryParse(userIdClaim, out var userId)) return Unauthorized();
+
+        // Sessão de suporte não troca a senha do cliente: o superadmin entra
+        // como ele para resolver problema, não para assumir a conta.
+        if (User.FindFirst(JwtService.ImpersonationClaim)?.Value == "1")
+            return StatusCode(403, new
+            {
+                error = "Sessão de suporte não pode trocar a senha do cliente.",
+            });
+
+        if (req.NewPassword == req.CurrentPassword)
+            return BadRequest(new { error = "A nova senha é igual à atual." });
+
+        var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct);
+        if (u is null) return Unauthorized();
+
+        bool atualConfere;
+        try
+        {
+            atualConfere = BCrypt.Net.BCrypt.Verify(req.CurrentPassword, u.PasswordHash);
+        }
+        catch (Exception ex)
+        {
+            // Hash corrompido: aqui não dá para destravar sozinho, porque a
+            // senha atual é inverificável. Só resta o reset pelo banco.
+            _log.LogError(ex, "Hash inválido ao trocar senha de {Email}", u.Email);
+            return BadRequest(new
+            {
+                error = "Não foi possível conferir a senha atual desta conta. "
+                      + "Peça a redefinição ao administrador do sistema.",
+            });
+        }
+
+        if (!atualConfere)
+        {
+            _log.LogInformation("Troca de senha recusada (senha atual errada) para {Email}", u.Email);
+            return BadRequest(new { error = "A senha atual não confere." });
+        }
+
+        u.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+        u.UpdatedAt = DateTime.UtcNow;
+
+        // Derruba as outras sessões: quem tinha um refresh token emitido com a
+        // senha antiga não continua dentro. A sessão atual segue viva pelo
+        // access token, então quem trocou não é deslogado no meio do trabalho.
+        var tokens = await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ToListAsync(ct);
+        tokens.ForEach(t => t.RevokedAt = DateTime.UtcNow);
+
+        _audit.Log("user.password_changed", "user", u.Id, new { sessionsRevoked = tokens.Count });
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Senha trocada pelo próprio usuário {Email}; {N} sessão(ões) revogada(s)",
+            u.Email, tokens.Count);
+
+        return Ok(new { sessionsRevoked = tokens.Count });
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UserDto>> Me(CancellationToken ct)
